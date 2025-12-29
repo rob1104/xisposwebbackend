@@ -3,14 +3,17 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    /** @use HasFactory<UserFactory> */
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
      * The attributes that are mass assignable.
@@ -44,5 +47,22 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function sucursales()
+    {
+        return $this->belongsToMany(Sucursal::class);
+    }
+
+    public function getAllowedBranches()
+    {
+        if($this->hasRole('Administrador')) return Sucursal::all();
+        return $this->sucursales();
+    }
+
+    public function canAccesBranch($branchId)
+    {
+        if($this->hasRole('Administrador')) return true;
+        return $this->sucursales()->where('sucursal_id', $branchId)->exists();
     }
 }
