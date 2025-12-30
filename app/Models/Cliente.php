@@ -4,14 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Cliente extends Model
 {
+    use LogsActivity;
     protected $fillable = [
         'numero_global', 'nombre_comercial', 'razon_social', 'rfc', 'email',
         'telefono', 'telefono2', 'contacto', 'calle', 'no_exterior', 'no_interior',
         'colonia', 'codigo_postal', 'ciudad', 'estado', 'pais', 'limite_credito',
-        'saldo_actual', 'ultimo_pago', 'obs', 'usuario_creador'
+        'saldo_actual', 'ultimo_pago', 'obs', 'usuario_creador', 'tax_regime_id', 'tipo_pago',
+        'dias_credito', 'vender_vencido'
     ];
 
     protected static function boot()
@@ -21,14 +25,23 @@ class Cliente extends Model
         // Antes de crear, generamos el número aleatorio
         static::creating(function ($customer) {
             $customer->numero_global = self::generateUniqueNumber();
+
+            if (auth()->check()) {
+                $customer->usuario_creador = auth()->user()->name;
+            } else {
+                $customer->usuario_creador = 'Sistema/Seeder';
+            }
+
         });
     }
 
     private static function generateUniqueNumber()
     {
         do {
-            // Genera algo como CTE-482931
-            $number = 'CTE-' . strtoupper(Str::random(6));
+            // Genera un número aleatorio entre 10,000,000 y 99,999,999
+            $number = 'CTE-' . random_int(10000000, 99999999);
+
+            // Verificamos en la columna 'numero_global' si ya existe
         } while (self::where('numero_global', $number)->exists());
 
         return $number;
@@ -38,4 +51,11 @@ class Cliente extends Model
     {
         return $this->belongsTo(TaxRegime::class);
     }
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->useLogName('clientes'); // Categoría del log
+    }
+
 }

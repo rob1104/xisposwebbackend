@@ -20,6 +20,12 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        activity('auth')
+            ->performedOn($request->user())
+            ->causedBy($request->user())
+            ->withProperties(['ip' => $request->ip()])
+            ->log('El usuario ha iniciado sesión');
+
         //Obtenemos el usuario autenticado y sucursales (tambien los Roles)
         $user = $request->user();
         $sucursales = $user->getAllowedBranches();
@@ -32,6 +38,7 @@ class AuthenticatedSessionController extends Controller
                 'email' => $user->email,
                 'roles' => $roles
             ],
+            'token' => $user->createToken('auth-token')->plainTextToken,
             'sucursales' => $sucursales,
             'message' => 'Login Exitoso'
         ]);

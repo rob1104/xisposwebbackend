@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ClienteRequest;
 use App\Models\Cliente;
 use Illuminate\Http\Request;
 
@@ -13,30 +14,21 @@ class ClientesController extends Controller
         return response()->json(Cliente::orderBy('razon_social')->get());
     }
 
-    public function store(Request $request)
+    public function store(ClienteRequest $request)
     {
-        $validated = $request->validate([
-            'nombre_comercial' => 'required|string|max:100',
-            'razon_social'     => 'nullable|string|max:100',
-            'rfc'              => 'nullable|string|max:24',
-            'telefono'         => 'nullable|string|max:30',
-            'telefono2'        => 'nullable|string|max:30',
-            'contacto'         => 'nullable|string|max:64',
-            'calle'            => 'nullable|string|max:99',
-            'no_exterior'      => 'nullable|string|max:8',
-            'no_interior'      => 'nullable|string|max:8',
-            'colonia'          => 'nullable|string|max:100',
-            'codigo_postal'    => 'nullable|string|max:5',
-            'ciudad'           => 'nullable|string|max:100',
-            'estado'           => 'nullable|string|max:100',
-            'pais'             => 'nullable|string|max:50',
-            'limite_credito'   => 'nullable|numeric',
-            'saldo_actual'     => 'nullable|numeric',
-            'obs'              => 'nullable|string',
-            'email'            => 'required|email|unique:clientes'
-        ]);
-        $validated['usuario_creador'] = auth()->user()->name;
-        $cliente = Cliente::create($validated);
+        $cliente = Cliente::create($request->validated());
         return response()->json($cliente, 211);
+    }
+
+    public function update(ClienteRequest $request, Cliente $cliente)
+    {
+        $cliente->update($request->validated());
+        return response()->json($cliente);
+    }
+
+    public function destroy(Cliente $cliente)
+    {
+        $cliente->delete();
+        return response()->json(['message' => 'Cliente eliminado']);
     }
 }
