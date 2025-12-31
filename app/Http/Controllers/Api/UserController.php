@@ -14,13 +14,14 @@ class UserController extends Controller
     public function index()
     {
         // Traemos usuarios con sus roles para la tabla de Quasar
-        $users = User::with('roles:name')->get()->map(function($user) {
+        $users = User::with(['roles:name', 'sucursales'])->get()->map(function($user) {
             return [
                 'id'     => $user->id,
                 'name'   => $user->name,
                 'email'  => $user->email,
                 'role'   => $user->roles->first()?->name ?? 'Sin Rol',
-                'status' => $user->status
+                'status' => $user->status,
+                'sucursales' => $user->sucursales
             ];
         });
         return response()->json($users);
@@ -36,6 +37,11 @@ class UserController extends Controller
         return DB::transaction(function () use ($request) {
             $user = User::create($request->validated());
             $user->assignRole($request->role);
+
+            if ($request->has('sucursales')) {
+                $user->sucursales()->sync($request->sucursales);
+            }
+
             return response()->json([
                 'message' => 'Usuario creado correctamente',
             ], 200);
@@ -54,6 +60,7 @@ class UserController extends Controller
             $user->update($data);
 
             $user->syncRoles([$request->role]);
+            $user->sucursales()->sync($request->sucursales);
 
             return response()->json([
                 'message' => 'Usuario actualizado correctamente.'

@@ -56,13 +56,15 @@ class User extends Authenticatable
 
     public function sucursales()
     {
-        return $this->belongsToMany(Sucursal::class);
+        return $this->belongsToMany(Sucursal::class, "sucursal_user", "user_id", "sucursal_id");
     }
 
     public function getAllowedBranches()
     {
-        if($this->hasRole('Administrador')) return Sucursal::all();
-        return $this->sucursales();
+        if ($this->hasRole('Administrador')) {
+            return Sucursal::all();
+        }
+        return $this->sucursales()->get();
     }
 
     public function canAccesBranch($branchId)
