@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\ClientesController;
+use App\Http\Controllers\Api\ProveedorController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\UserController;
@@ -21,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);
     Route::apiResource('sucursales', SucursalController::class);
+    Route::apiResource('providers', ProveedorController::class);
     Route::get('/roles-list', [UserController::class, 'getRoles'])->name('roles.list');
     Route::get('permissions-all', [RoleController::class, 'getAllPermissions']);
     Route::get('/clientes', [ClientesController::class, 'index'])->name('clientes.index');
@@ -30,4 +33,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tax-regimes', function() {
         return TaxRegime::all();
     });
+    Route::get('/logs', [AuditController::class, 'index'])->name('logs.index');
 });

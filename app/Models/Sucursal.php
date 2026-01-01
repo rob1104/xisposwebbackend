@@ -23,6 +23,7 @@ class Sucursal extends Model
     {
         return LogOptions::defaults()
             ->logFillable()
+            ->logOnlyDirty()
             ->useLogName('sucursales'); // Categoría del log
     }
 }
