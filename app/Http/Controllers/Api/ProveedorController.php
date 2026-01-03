@@ -14,6 +14,15 @@ class ProveedorController extends Controller
         return response()->json(Provider::orderBy('razon_social')->get());
     }
 
+    public function buscar(Request $request)
+    {
+        $q = $request->input('q');
+        return Provider::where('nombre_comercial', 'LIKE', "%$q%")
+            ->orWhere('razon_social', 'LIKE', "%$q%")
+            ->orWhere('rfc', 'LIKE', "%$q%")
+            ->get();
+    }
+
     public function store(ProveedorRequest $request)
     {
         $data = $request->validated();

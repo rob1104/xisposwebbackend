@@ -38,6 +38,6 @@ class SucursalProducto extends Model
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
-            ->useLogName('inventario'); // Categoría del log
+            ->useLogName('inventario');
     }
 }

@@ -6,17 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
-class Impuesto extends Model
+class Medida extends Model
 {
     use LogsActivity;
 
-    protected $fillable = ['nombre', 'porcentaje', 'tipo'];
+    protected $fillable = ['c_ClaveUnidad', 'nombre'];
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
-            ->useLogName('impuestos'); // Categoría del log
+            ->useLogName('Umedidas'); // Categoría del log
     }
 }

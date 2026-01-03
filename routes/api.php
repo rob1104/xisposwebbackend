@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\AuditController;
+use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\CategoriaController;
 use App\Http\Controllers\Api\ClientesController;
+use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\ImpuestoController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\ProductoController;
@@ -35,6 +37,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('categorias', CategoriaController::class);
     Route::apiResource('impuestos', ImpuestoController::class);
     Route::apiResource('productos', ProductoController::class);
+    Route::apiResource('compras', CompraController::class);
+
+    Route::put('/compras/{id}/cancelar', [CompraController::class, 'cancelar'])->name('compras.cancelar');
 
     Route::get('/roles-list', [UserController::class, 'getRoles'])->name('roles.list');
     Route::get('/permissions-all', [RoleController::class, 'getAllPermissions']);
@@ -42,6 +47,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/clientes', [ClientesController::class, 'store'])->name('clientes.store');
     Route::put('/clientes/{cliente}', [ClientesController::class, 'update'])->name('clientes.update');
     Route::delete('/clientes/{cliente}', [ClientesController::class, 'destroy'])->name('clientes.delete');
+
+    Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar']);
+
     Route::get('/tax-regimes', function() {
         return TaxRegime::all();
     });
@@ -62,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('historial', [TransferenciaController::class, 'index']);
     });
 
+
     // --- MÓDULO DE INVENTARIOS Y KARDEX ---
     Route::prefix('inventario')->group(function () {
         Route::get('/', [InventarioController::class, 'index'])->name('inventario.index');
@@ -69,7 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/stock-especifico', [InventarioController::class, 'obtenerStockActual'])->name('inventario.obtener-stock-actual');
         Route::post('/movimiento', [InventarioController::class, 'registrarMovimiento']);
         //Todas las sucursales
-        ROute::get(('reporte-consolidado'), [InventarioController::class, 'reporteConsolidado']);
+        ROute::get(('/reporte-consolidado'), [InventarioController::class, 'reporteConsolidado']);
         // Consulta de stock en todas las sucursales para un producto
         Route::get('stock-global/{producto_id}', [InventarioController::class, 'stockGlobal']);
 
@@ -78,6 +87,28 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Reporte de inventario valorizado por sucursal
         Route::get('valorizado/{sucursal_id}', [InventarioController::class, 'reporteValorizado']);
+    });
+
+    Route::prefix('catalogos')->group(function () {
+
+        // Rutas para Categorías
+        Route::get('categorias', [CatalogoController::class, 'getCategorias']);
+        Route::post('categorias', [CatalogoController::class, 'storeCategoria']);
+        Route::put('categorias/{id}', [CatalogoController::class, 'updateCategoria']);
+        Route::delete('categoria/{id}', [CatalogoController::class, 'destroyCategoria']);
+
+        // Rutas para Impuestos
+        Route::get('impuestos', [CatalogoController::class, 'getImpuestos']);
+        Route::post('impuestos', [CatalogoController::class, 'storeImpuesto']);
+        Route::put('impuestos/{id}', [CatalogoController::class, 'updateImpuesto']); // Agregado para edición
+        Route::delete('impuesto/{id}', [CatalogoController::class, 'destroyImpuesto']);
+
+        // Rutas para Unidades de Medida
+        Route::get('medidas', [CatalogoController::class, 'getUnidades']);
+        Route::post('medidas', [CatalogoController::class, 'storeUnidad']);
+        Route::put('medidas/{id}', [CatalogoController::class, 'updateUnidad']);
+        Route::delete('medidas/{id}', [CatalogoController::class, 'destroyUnidad']);
+
     });
 
     Route::get('/reportes/stock', [InventarioController::class, 'reporteStock']);

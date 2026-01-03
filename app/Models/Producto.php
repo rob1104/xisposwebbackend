@@ -36,6 +36,11 @@ class Producto extends Model
         return $this->belongsToMany(Impuesto::class, 'producto_impuestos');
     }
 
+    public function umedida()
+    {
+        return $this->belongsTo(Medida::class, 'clave_unidad', 'c_ClaveUnidad');
+    }
+
     public function sucursales()
     {
         return $this->belongsToMany(Sucursal::class, 'sucursal_productos')
