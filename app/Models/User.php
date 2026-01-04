@@ -28,7 +28,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'status'
+        'status',
+        'sucursal_activa_id'
     ];
 
     /**

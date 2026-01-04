@@ -16,11 +16,18 @@ class CompraController extends Controller
 {
     public function index(Request $request)
     {
+        // 1. Obtenemos el usuario y la sucursal de la cabecera
+        $user = Auth::user();
         $sucursal_id = $request->header('X-Sucursal-Id');
-        return Compra::where('sucursale_id', $sucursal_id)
-            ->with(['provider', 'user'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        // 2. Iniciamos la consulta con las relaciones necesarias
+        $query = Compra::with(['provider', 'user', 'sucursal']);
+        // 3. Aplicamos la lógica de visualización por rol
+        if($user->roles[0] !== 'Administrador')
+            $query->where('sucursale_id', $sucursal_id);
+        // Si es admin, no entra al 'where' y trae todas las sucursales
+        $compras = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json($compras);
     }
 
     public function store(Request $request)

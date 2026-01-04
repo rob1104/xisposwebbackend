@@ -2,11 +2,11 @@
 
 use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\CatalogoController;
-use App\Http\Controllers\Api\CategoriaController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\ImpuestoController;
 use App\Http\Controllers\Api\InventarioController;
+use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
 use App\Http\Controllers\Api\ProveedorController;
 use App\Http\Controllers\Api\RoleController;
@@ -17,36 +17,35 @@ use App\Models\TaxRegime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
-    $user = $request->user();
-    return [
-        'user' => $user,
-        'roles' => $user->getRoleNames(),
-        'sucursales' => $user->getAllowedBranches()
-    ];
-});
 
 Route::middleware('auth:sanctum')->group(function () {
+
+    Route::get('/user', function (Request $request) {
+        $user = $request->user();
+        return [
+            'user' => $user,
+            'roles' => $user->getRoleNames(),
+            'sucursales' => $user->getAllowedBranches(),
+            'sucursal_activa_id' => $user->sucursal_activa_id
+        ];
+    });
 
     Route::get('/productos/search', [ProductoController::class, 'search']);
 
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);
-    Route::apiResource('sucursales', SucursalController::class);
+    Route::apiResource('clientes', ClientesController::class);
     Route::apiResource('providers', ProveedorController::class);
-    Route::apiResource('categorias', CategoriaController::class);
-    Route::apiResource('impuestos', ImpuestoController::class);
     Route::apiResource('productos', ProductoController::class);
+    Route::apiResource('sucursales', SucursalController::class);
     Route::apiResource('compras', CompraController::class);
+
 
     Route::put('/compras/{id}/cancelar', [CompraController::class, 'cancelar'])->name('compras.cancelar');
 
     Route::get('/roles-list', [UserController::class, 'getRoles'])->name('roles.list');
     Route::get('/permissions-all', [RoleController::class, 'getAllPermissions']);
-    Route::get('/clientes', [ClientesController::class, 'index'])->name('clientes.index');
-    Route::post('/clientes', [ClientesController::class, 'store'])->name('clientes.store');
-    Route::put('/clientes/{cliente}', [ClientesController::class, 'update'])->name('clientes.update');
-    Route::delete('/clientes/{cliente}', [ClientesController::class, 'destroy'])->name('clientes.delete');
+
 
     Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar']);
 
@@ -109,6 +108,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('medidas/{id}', [CatalogoController::class, 'updateUnidad']);
         Route::delete('medidas/{id}', [CatalogoController::class, 'destroyUnidad']);
 
+    });
+
+    Route::prefix('pos')->group(function () {
+        // Para el escáner (búsqueda exacta por código de barras)
+        Route::get('/producto/{barcode}', [PosController::class, 'getByBarcode']);
+
+        // Para el diálogo de búsqueda (filtro por nombre o código parcial)
+        Route::get('/buscar-filtro', [PosController::class, 'searchByFilter']);
     });
 
     Route::get('/reportes/stock', [InventarioController::class, 'reporteStock']);

@@ -21,7 +21,8 @@ class UserController extends Controller
                 'email'  => $user->email,
                 'role'   => $user->roles->first()?->name ?? 'Sin Rol',
                 'status' => $user->status,
-                'sucursales' => $user->sucursales
+                'sucursales' => $user->sucursales,
+                'sucursal_activa_id' => $user->sucursal_activa_id
             ];
         });
         return response()->json($users);
@@ -57,13 +58,16 @@ class UserController extends Controller
                 unset($data['password']);
             }
 
+
+
             $user->update($data);
 
             $user->syncRoles([$request->role]);
             $user->sucursales()->sync($request->sucursales);
 
             return response()->json([
-                'message' => 'Usuario actualizado correctamente.'
+                'message' => 'Usuario actualizado correctamente.',
+                'user' => $user
             ]);
         });
     }
@@ -79,6 +83,31 @@ class UserController extends Controller
         $user->delete();
         return response()->json([
             'message' => 'Usuario eliminado de los registros.'
+        ]);
+    }
+
+    public function asignarSucursalActiva(Request $request, $user_id)
+    {
+        $request->validate([
+            'sucursal_id' => 'required|exists:sucursales,id'
+        ]);
+
+        if(auth()->user()->roles[0] !== 'Administrador') {
+            return response()->json(['error' => 'No Autorizado']);
+        }
+
+        $usuario = User::with('sucursales')->findOrFail($user_id);
+        $tieneAcceso = $usuario->sucursales->contains($request->sucursal_id);
+
+        if (!$tieneAcceso) {
+            return response()->json(['error' => 'La sucursal elegida no está asignada a este usuario.'], 422);
+        }
+
+        $usuario->update(['sucursa_activa_id' => $request->sucursal_id]);
+
+        return response()->json([
+            'message' => "Sucursal activa actualizada para {$usuario->name}.",
+            'user' => $usuario
         ]);
     }
 }

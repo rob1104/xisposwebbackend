@@ -33,7 +33,8 @@ class UserRequest extends FormRequest
             // Contraseña obligatoria solo en creación
             'password' => $this->isMethod('post') ? 'required|min:8' : 'nullable|min:8',
             'role'     => 'required|string|exists:roles,name',
-            'status'   => 'required|boolean'
+            'status'   => 'required|boolean',
+            'sucursal_activa_id' => 'nullable|exists:sucursales,id'
         ];
     }
 }

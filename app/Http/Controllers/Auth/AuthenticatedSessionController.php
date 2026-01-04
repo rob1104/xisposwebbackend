@@ -36,7 +36,8 @@ class AuthenticatedSessionController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'roles' => $roles
+                'roles' => $roles,
+                'sucursal_activa_id' => $user->sucursal_activa_id,
             ],
             'token' => $user->createToken('auth-token')->plainTextToken,
             'sucursales' => $sucursales,
