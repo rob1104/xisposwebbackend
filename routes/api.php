@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TransferenciaController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\VentaController;
 use App\Models\TaxRegime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -39,9 +40,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('productos', ProductoController::class);
     Route::apiResource('sucursales', SucursalController::class);
     Route::apiResource('compras', CompraController::class);
+    Route::apiResource('ventas', VentaController::class);
 
 
     Route::put('/compras/{id}/cancelar', [CompraController::class, 'cancelar'])->name('compras.cancelar');
+    Route::put('/ventas/{id}/cancelar', [VentaController::class, 'cancelar'])->name('ventas.cancelar');
 
     Route::get('/roles-list', [UserController::class, 'getRoles'])->name('roles.list');
     Route::get('/permissions-all', [RoleController::class, 'getAllPermissions']);
@@ -111,11 +114,18 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('pos')->group(function () {
+        Route::get('/verificar-turno', [PosController::class, 'verificarTurno']); //
+        Route::post('/abrir-turno', [PosController::class, 'abrirTurno']); //
         // Para el escáner (búsqueda exacta por código de barras)
         Route::get('/producto/{barcode}', [PosController::class, 'getByBarcode']);
 
         // Para el diálogo de búsqueda (filtro por nombre o código parcial)
         Route::get('/buscar-filtro', [PosController::class, 'searchByFilter']);
+
+        Route::post('/finalizar-venta', [VentaController::class, 'store']);
+
+        Route::get('/balance-turno/{id}', [PosController::class, 'balanceTurno']);
+        Route::post('/cerrar-turno', [PosController::class, 'cerrarTurno']);
     });
 
     Route::get('/reportes/stock', [InventarioController::class, 'reporteStock']);

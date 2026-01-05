@@ -61,6 +61,9 @@ class Producto extends Model
         return $this->hasMany(SucursalProducto::class, 'producto_id', 'id');
     }
 
+    public function ventas() { return $this->hasMany(VentaDetalle::class); }
+    public function movimientos() { return $this->hasMany(InventarioMovimiento::class); }
+
 
     public function getActivitylogOptions(): LogOptions
     {

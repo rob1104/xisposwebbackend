@@ -108,7 +108,7 @@ class CompraController extends Controller
                     'stock_anterior' => $stockAnterior,
                     'stock_nuevo' => $stockNuevo,
                     'referencia_tipo' => 'COMPRA',
-                    'referencia_id' => $compra->id,
+                    'referencia_id' => $compra->folio,
                     'observaciones' => "Compra registrada con folio: " . $compra->folio
                 ]);
             }

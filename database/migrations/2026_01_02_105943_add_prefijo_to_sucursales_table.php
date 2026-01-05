@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('sucursales', function (Blueprint $table) {
-            $table->string('prefijo', 3)->nullable()->after('nombre');
+            $table->string('prefijo', 3)->after('nombre')->unique();
         });
     }
 

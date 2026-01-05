@@ -6,25 +6,28 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
-class InventarioMovimiento extends Model
+class VentaDetalle extends Model
 {
     use LogsActivity;
+
     protected $fillable = [
-        'sucursal_id', 'producto_id', 'user_id', 'tipo_movimiento',
-        'cantidad', 'stock_anterior', 'stock_nuevo', 'observaciones',
-        'referencia_tipo',
-        'referencia_id'
+        'venta_id',
+        'producto_id',
+        'cantidad',
+        'precio_unitario',
+        'impuesto_unitario',
+        'subtotal',
+        'total'
     ];
 
     public function producto() { return $this->belongsTo(Producto::class); }
-    public function sucursal() { return $this->belongsTo(Sucursal::class); }
-    public function user() { return $this->belongsTo(User::class); }
+    public function venta() { return $this->belongsTo(Venta::class); }
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
-            ->useLogName('movimientos'); // Categoría del log
+            ->useLogName('ventas_detalle');
     }
 }

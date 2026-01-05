@@ -78,6 +78,21 @@ class ProductoController extends Controller
         // Verificamos si es parte de un kit antes de borrar
         $estaEnKit = DB::table('producto_composicion')->where('producto_hijo_id', $producto->id)->exists();
 
+        // 1. Validar ventas
+        $tieneVentas = $producto->ventas()->exists();
+
+        // 2. Validar movimientos de inventario (Entradas, Salidas, Ajustes)
+        $tieneMovimientos = $producto->movimientos()->exists();
+
+        if ($tieneVentas || $tieneMovimientos) {
+            $causa = $tieneVentas ? 'historial de ventas' : 'movimientos de inventario';
+            if ($tieneVentas && $tieneMovimientos) $causa = 'ventas y movimientos de inventario';
+
+            return response()->json([
+                'message' => "Restricción de Integridad: No se puede eliminar el producto porque cuenta con {$causa}. Se recomienda marcarlo como 'Inactivo'."
+            ], 422);
+        }
+
         if ($estaEnKit) {
             return response()->json(['message' => 'No se puede eliminar: es componente de un producto compuesto'], 422);
         }
