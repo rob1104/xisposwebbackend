@@ -6,22 +6,22 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
-class Sucursal extends Model
+class Ticket extends Model
 {
     use LogsActivity;
-    protected $table = 'sucursales';
 
-    protected $fillable = [
-        'nombre','direccion','telefono'
+    protected $fillable = ['header_lines', 'footer_lines',
+        'sucursale_id'
     ];
-    public function users()
-    {
-        return $this->belongsToMany(User::class);
-    }
 
-    public function ticket()
+    protected $casts = [
+        'header_lines' => 'array',
+        'footer_lines' => 'array',
+    ];
+
+    public function sucursal()
     {
-        return $this->hasOne(Ticket::class, "sucursale_id", "id");
+        return $this->belongsTo(Sucursal::class, 'sucursale_id', 'id');
     }
 
     public function getActivitylogOptions(): LogOptions
@@ -29,6 +29,6 @@ class Sucursal extends Model
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
-            ->useLogName('sucursales');
+            ->useLogName('tickets');
     }
 }

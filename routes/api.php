@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
 use App\Http\Controllers\Api\ProveedorController;
+use App\Http\Controllers\Api\QZController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TransferenciaController;
@@ -15,10 +16,10 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VentaController;
 use App\Http\Controllers\ConfiguracionController;
 use App\Http\Controllers\PerfilController;
+use App\Http\Controllers\TicketController;
 use App\Models\TaxRegime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
 
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -139,12 +140,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/balance-turno/{id}', [PosController::class, 'balanceTurno']);
         Route::post('/cerrar-turno', [PosController::class, 'cerrarTurno']);
+        Route::get('/ultimo-ticket', [PosController::class, 'getUltimoTicket']);
     });
 
     Route::post('perfil/update-name', [PerfilController::class, 'updateName']);
     Route::post('perfil/update-password', [PerfilController::class, 'updatePassword']);
 
     Route::get('/reportes/stock', [InventarioController::class, 'reporteStock']);
+
+    Route::get('sucursales/{id}/ticket-config', [TicketController::class, 'show']);
+    Route::post('sucursales/{id}/ticket-config', [TicketController::class, 'store']);
+
 });
 
 Route::get('/config', [ConfiguracionController::class, 'index']);

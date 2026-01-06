@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CajaTurno;
 use App\Models\Producto;
+use App\Models\Venta;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -157,6 +158,14 @@ class PosController extends Controller
             });
 
         return response()->json($productos);
+    }
+
+    public function getUltimoTicket(Request $request)
+    {
+        return Venta::where('sucursale_id', $request->user()->sucursal_activa_id)
+                    ->where('user_id', $request->user()->id)
+                    ->with(['detalles', 'cliente', 'detalles.producto','sucursal', 'sucursal.ticket'])
+                    ->latest()->first();
     }
 
 }

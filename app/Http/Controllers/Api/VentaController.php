@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use App\Models\InventarioMovimiento;
 use App\Models\Producto;
 use App\Models\Sucursal;
+use App\Models\Ticket;
 use App\Models\Venta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -169,7 +170,12 @@ class VentaController extends Controller
                 }
             }
 
+            $configticket = Ticket::where('sucursale_id', $venta->sucursale_id)->first();
+            $venta->load('cliente');
+
             return response()->json([
+                'cliente' => $venta->cliente,
+                'configticket' => $configticket,
                 'message' => 'Venta finalizada',
                 'folio' => $venta->folio,
                 'id' => $venta->id

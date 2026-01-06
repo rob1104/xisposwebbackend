@@ -52,7 +52,7 @@ class Venta extends Model
 
     public function sucursal()
     {
-        return $this->belongsTo(Sucursal::class);
+        return $this->belongsTo(Sucursal::class, 'sucursale_id', 'id');
     }
 
     public function user()
