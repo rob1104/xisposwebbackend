@@ -4,7 +4,6 @@ use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
-use App\Http\Controllers\Api\ImpuestoController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
@@ -14,6 +13,8 @@ use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TransferenciaController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VentaController;
+use App\Http\Controllers\ConfiguracionController;
+use App\Http\Controllers\PerfilController;
 use App\Models\TaxRegime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -21,14 +22,25 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
 
+    Route::get('/config', [ConfiguracionController::class, 'index']);
+    Route::post('config/update', [ConfiguracionController::class, 'update']);
     Route::get('/user', function (Request $request) {
         $user = $request->user();
         return [
             'user' => $user,
             'roles' => $user->getRoleNames(),
             'sucursales' => $user->getAllowedBranches(),
-            'sucursal_activa_id' => $user->sucursal_activa_id
+            'sucursal_activa_id' => $user->sucursal_activa_id,
+            'permissions' => $user->getAllPermissions()
         ];
+    });
+
+    Route::get('/clientes-search', function (Request $request) {
+        $q = $request->q;
+        return App\Models\Cliente::where('nombre_comercial', 'LIKE', "%$q%")
+            ->orWhere('rfc', 'LIKE', "%$q%")
+            ->limit(10)
+            ->get(['id', 'nombre_comercial', 'rfc', 'limite_credito', 'saldo_actual', 'dias_credito', 'vender_vencido']);
     });
 
     Route::get('/productos/search', [ProductoController::class, 'search']);
@@ -42,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('compras', CompraController::class);
     Route::apiResource('ventas', VentaController::class);
 
+    Route::get('clientes/{îd}/antiguedad', [ClientesController::class, 'getAntiguedadSaldos'])->name('clientes.antiguedad');
 
     Route::put('/compras/{id}/cancelar', [CompraController::class, 'cancelar'])->name('compras.cancelar');
     Route::put('/ventas/{id}/cancelar', [VentaController::class, 'cancelar'])->name('ventas.cancelar');
@@ -128,5 +141,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/cerrar-turno', [PosController::class, 'cerrarTurno']);
     });
 
+    Route::post('perfil/update-name', [PerfilController::class, 'updateName']);
+    Route::post('perfil/update-password', [PerfilController::class, 'updatePassword']);
+
     Route::get('/reportes/stock', [InventarioController::class, 'reporteStock']);
 });
+
+Route::get('/config', [ConfiguracionController::class, 'index']);

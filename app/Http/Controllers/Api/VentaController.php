@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CajaTurno;
+use App\Models\Cliente;
 use App\Models\InventarioMovimiento;
 use App\Models\Producto;
 use App\Models\Sucursal;
@@ -44,16 +45,24 @@ class VentaController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+            'cliente_id' => 'nullable|exists:clientes,id',
             'items' => 'required|array',
-            'pagos' => 'required|array',
+            'pagos' => 'required_if:tipo_pago,Contado|array',
+            'pagos.*.monto' => 'required_with:pagos|numeric',
+            'pagos.*.metodo_pago' => 'required_with:pagos',
             'total' => 'required|numeric',
+            'tipo_pago' => 'required|in:Contado,Credito'
         ]);
+
+        // Venta a Crédito requiere cliente específico
+        if ($request->tipo_pago === 'Credito' && (is_null($request->cliente_id) || $request->cliente_id == 1)) {
+            return response()->json(['message' => 'No se puede realizar una venta a crédito al público general.'], 422);
+        }
 
         // 0. Obtenemos el turno y generamos el folio por adelantado
         $turno = CajaTurno::where('user_id', auth()->id())
             ->where('status', 'Abierto')
             ->firstOrFail();
-
         $folio = $this->generarFolioUnico($turno->sucursale_id);
 
         return DB::transaction(function () use ($request, $turno, $folio) {
@@ -61,15 +70,29 @@ class VentaController extends Controller
             $totalImpuestos = 0;
             $detallesParaInsertar = [];
 
+            $fechaVencimiento = now();
+            $clienteId = $request->cliente_id;
+
+            if ($request->tipo_pago === 'Credito') {
+                // Bloqueamos la fila del cliente para evitar colisiones de saldo
+                $cliente = Cliente::lockForUpdate()->find($clienteId);
+
+                // Validación de límites y morosidad
+                $this->validarCreditoCliente($cliente, $request->total);
+
+                // Calculamos vencimiento y actualizamos saldo
+                $fechaVencimiento = now()->addDays($cliente->dias_credito);
+                $cliente->increment('saldo_actual', $request->total);
+            }
+
             foreach ($request->items as $item) {
+                // 1. Cargamos el producto con sus impuestos y sus componentes (hijos)
                 $producto = Producto::with('impuestos')->findOrFail($item['id']);
                 $tasaTotal = $producto->impuestos->sum('porcentaje') / 100;
+                $precioFinalConImpuesto = (float)$item['precio'];
+                $cantidad = (float)$item['cantidad'];
 
-                // Ajuste: Usamos precio_venda para ser consistentes con el frontend
-                $precioFinalConImpuesto = (float) $item['precio'];
-                $cantidad = (float) $item['cantidad'];
-
-                // 3. DESGLOSE MATEMÁTICO
+                // 2. Cálculos financieros (siempre sobre el producto PADRE para el detalle de venta)
                 $precioBaseUnitario = $precioFinalConImpuesto / (1 + $tasaTotal);
                 $impuestoUnitario = $precioFinalConImpuesto - $precioBaseUnitario;
 
@@ -89,35 +112,34 @@ class VentaController extends Controller
                     'total' => $totalLinea,
                 ];
 
-                // 5. AFECTACIÓN DE INVENTARIO Y MOVIMIENTO
-                $stockSucursal = $producto->sucursales()
-                    ->where('sucursal_id', $turno->sucursale_id)
-                    ->first();
+                // 3. LÓGICA DE INVENTARIO SEGÚN TIPO
+                if ($producto->tipo_producto === 'Compuesto') {
+                    // Si es Kit: Descontamos de los HIJOS
+                    foreach ($producto->componentes as $hijo) {
+                        // Cantidad a descontar = (Cantidad requerida por el kit) * (Cantidad de kits vendidos)
+                        $cantidadTotalHijo = $hijo->pivot->cantidad * $cantidad;
 
-                if ($stockSucursal) {
-                    $nuevoStock = $stockSucursal->pivot->stock_actual - $cantidad;
-
-                    // Actualizamos existencia
-                    $producto->sucursales()->updateExistingPivot($turno->sucursale_id, [
-                        'stock_actual' => $nuevoStock
-                    ]);
-
-                    // REGISTRAMOS LA SALIDA EN EL KARDEX
-                    InventarioMovimiento::create([
-                        'producto_id'  => $producto->id,
-                        'sucursal_id' => $turno->sucursale_id,
-                        'tipo_movimiento'  => 'SALIDA POR VENTA',
-                        'observaciones' => "vENTA registrada con folio: " . $folio,
-                        'cantidad'     => $cantidad,
-                        'referencia_tipo' => 'VENTA',
-                        'stock_anterior'  => $stockSucursal->pivot->stock_actual,
-                        'stock_nuevo' => $nuevoStock,
-                        'user_id'      => auth()->id()
-                    ]);
+                        $this->descontarExistencia(
+                            $hijo,
+                            $cantidadTotalHijo,
+                            $turno->sucursale_id,
+                            $folio,
+                            "VENTA KIT: {$producto->nombre}"
+                        );
+                    }
+                } elseif ($producto->tipo_producto === 'Inventariable') {
+                    // Si es simple: Descontamos del PADRE
+                    $this->descontarExistencia(
+                        $producto,
+                        $cantidad,
+                        $turno->sucursale_id,
+                        $folio,
+                        "VENTA DIRECTA"
+                    );
                 }
             }
 
-            // 6. Crear Cabecera de Venta
+            // 4. Creación de Cabecera, Detalles y Pagos (Igual que antes)
             $venta = Venta::create([
                 'folio' => $folio,
                 'sucursale_id' => $turno->sucursale_id,
@@ -127,21 +149,24 @@ class VentaController extends Controller
                 'impuestos' => $totalImpuestos,
                 'total' => $request->total,
                 'tipo_cambio' => $turno->tipo_cambio,
-                'status' => 'Completada'
+                'tipo_pago' => $request->tipo_pago,
+                'status' => 'Completada',
+                'cliente_id' => $clienteId
             ]);
 
-            // 7. Detalles y Pagos
             $venta->detalles()->createMany($detallesParaInsertar);
 
-            foreach ($request->pagos as $pago) {
-                $venta->pagos()->create([
-                    'metodo_pago' => $pago['metodo'],
-                    'monto' => $pago['monto'],
-                    'referencia_pago' => $pago['referencia'] ?? null,
-                    'tarjeta_ultimos_4' => $pago['tarjeta'] ?? null,
-                    'efectivo_recibido' => $pago['efectivo_recibido'] ?? null,
-                    'cambio_entregado' => $pago['cambio_entregado'] ?? null,
-                ]);
+            if ($request->tipo_pago === 'Contado') {
+                foreach ($request->pagos as $pago) {
+                    $venta->pagos()->create([
+                        'metodo_pago' => $pago['metodo_pago'],
+                        'monto' => $pago['monto'],
+                        'referencia_pago' => $pago['referencia_pago'] ?? null,
+                        'tarjeta_ultimos_4' => $pago['tarjeta_ultimos_4'] ?? null,
+                        'efectivo_recibido' => $pago['efectivo_recibido'] ?? null,
+                        'cambio_entregado' => $pago['cambio_entregado'] ?? null,
+                    ]);
+                }
             }
 
             return response()->json([
@@ -187,7 +212,6 @@ class VentaController extends Controller
                         'cantidad'     => $detalle->cantidad,
                         'stock_anterior'  => $stockPivot->stock_actual,
                         'stock_nuevo'  => $nuevoStock,
-                        'referencia'   => $venta->folio,
                         'user_id'      => auth()->id()
                     ]);
                 }
@@ -221,5 +245,82 @@ class VentaController extends Controller
 
         // Retornamos el formato PREFIJO-00000001 (8 dígitos de padding)
         return sprintf("%s-%s", $prefijo, str_pad($consecutivo, 8, '0', STR_PAD_LEFT));
+    }
+
+    /**
+     * Valida integralmente el estado crediticio de un cliente antes de procesar una venta.
+     * * @param \App\Models\Cliente $cliente Instancia del cliente obtenida con lockForUpdate()
+     * @param float $montoVenta Total de la transacción actual
+     * @throws \Exception
+     */
+    private function validarCreditoCliente($cliente, $montoVenta)
+    {
+        // 1. Verificar si el cliente tiene habilitada la línea de crédito
+        if ($cliente->limite_credito <= 0) {
+            throw new \Exception("El cliente no tiene una línea de crédito autorizada en el sistema.");
+        }
+
+        // 2. Validar que el nuevo saldo no exceda el límite permitido
+        $saldoProyectado = $cliente->saldo_actual + $montoVenta;
+        if ($saldoProyectado > $cliente->limite_credito) {
+            $disponible = $cliente->limite_credito - $cliente->saldo_actual;
+            throw new \Exception(
+                "Límite de crédito excedido. El saldo actual ($" . number_format($cliente->saldo_actual, 2) .
+                ") más esta venta superan el límite de $" . number_format($cliente->limite_credito, 2) .
+                ". Disponible: $" . number_format($disponible, 2)
+            );
+        }
+
+        // 3. Validar morosidad si el cliente tiene restringida la venta con facturas vencidas
+        if ($cliente->vender_vencido == 0) {
+            $tieneVencidos = \App\Models\Venta::where('cliente_id', $cliente->id)
+                ->where('tipo_pago', 'Crédito')
+                ->where('status', 'Completada') // Solo ventas vigentes
+                ->whereDate('fecha_vencimiento', '<', now()) // Que ya hayan vencido
+                ->where(function ($query) {
+                    // Filtramos solo aquellas que tengan un saldo pendiente mayor a 0.01
+                    $query->whereRaw('total > (SELECT COALESCE(SUM(monto), 0) FROM venta_pagos WHERE venta_pagos.venta_id = ventas.id)');
+                })
+                ->exists();
+
+            if ($tieneVencidos) {
+                throw new \Exception(
+                    "Operación rechazada: El cliente presenta facturas vencidas. " .
+                    "Debe liquidar sus saldos atrasados antes de realizar nuevas compras a crédito."
+                );
+            }
+        }
+    }
+
+    /**
+     * Procesa el descuento físico y genera el movimiento de inventario.
+     */
+    private function descontarExistencia($producto, $cantidad, $sucursalId, $folio, $observacionExtra)
+    {
+        $stockSucursal = $producto->sucursales()
+            ->where('sucursal_id', $sucursalId)
+            ->first();
+
+        if ($stockSucursal) {
+            $nuevoStock = $stockSucursal->pivot->stock_actual - $cantidad;
+
+            // Actualizamos tabla pivot de existencia
+            $producto->sucursales()->updateExistingPivot($sucursalId, [
+                'stock_actual' => $nuevoStock
+            ]);
+
+            // REGISTRAMOS EL MOVIMIENTO (Kardex)
+            InventarioMovimiento::create([
+                'producto_id'      => $producto->id,
+                'sucursal_id'      => $sucursalId,
+                'tipo_movimiento'  => 'SALIDA POR VENTA',
+                'observaciones'    => "{$observacionExtra}. Folio: {$folio}",
+                'cantidad'         => $cantidad,
+                'referencia_tipo'  => 'VENTA',
+                'stock_anterior'   => $stockSucursal->pivot->stock_actual,
+                'stock_nuevo'      => $nuevoStock,
+                'user_id'          => auth()->id()
+            ]);
+        }
     }
 }

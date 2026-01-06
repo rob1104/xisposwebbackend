@@ -30,13 +30,14 @@ class AuthenticatedSessionController extends Controller
         $user = $request->user();
         $sucursales = $user->getAllowedBranches();
         $roles = $user->getRoleNames();
-
+        $permissions = $user->getAllPermissions();
         return response()->json([
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'roles' => $roles,
+                'permissions' => $permissions,
                 'sucursal_activa_id' => $user->sucursal_activa_id,
             ],
             'token' => $user->createToken('auth-token')->plainTextToken,
