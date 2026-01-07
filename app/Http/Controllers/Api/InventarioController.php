@@ -14,11 +14,16 @@ use Illuminate\Support\Facades\DB;
 class InventarioController extends Controller
 {
 
-    public function index()
+    public function index(Request $request)
     {
-        return InventarioMovimiento::with(['producto', 'sucursal', 'user'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $sucursalId = $request->header('X-Sucursal-Id') ?? $request->query('sucursal_id');
+        $query = InventarioMovimiento::with(['producto', 'sucursal', 'user']);
+
+        if ($sucursalId) {
+            $query->where('sucursal_id', $sucursalId);
+        }
+
+        return $query->orderBy('created_at', 'desc')->get();
     }
 
     public function buscarProducto(Request $request)
@@ -223,6 +228,32 @@ class InventarioController extends Controller
         return response()->json($movimientos);
     }
 
+    public function getKardex(Request $request, $id)
+    {
+        $sucursal_id = $request->sucursal_id; // Enviada desde el frontend
+
+        $movimientos = InventarioMovimiento::where('producto_id', $id)
+            ->where('sucursal_id', $sucursal_id)
+            ->with('user:id,name') // Para saber quién hizo el movimiento
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $stockActual = SucursalProducto::where('producto_id', $id)
+            ->where('sucursal_id', $sucursal_id)
+            ->first();
+
+        $sucursal = Sucursal::find($sucursal_id);
+        return response()->json([
+            'movimientos' => $movimientos,
+            'resumen' => [
+                'stock_actual' => $stockActual->stock_actual ?? 0,
+                'stock_minimo' => $stockActual->stock_minimo ?? 0,
+                'costo_promedio' => $stockActual->costo_promedio ?? 0,
+                'sucursal' => $sucursal ?? ''
+            ]
+        ]);
+    }
+
     /**
      * Genera un resumen del valor del inventario por sucursal.
      */
@@ -302,5 +333,35 @@ class InventarioController extends Controller
         return SucursalProducto::where('sucursal_id', $sucursalId)
             ->with('producto')
             ->get();
+    }
+
+    public function reporteHistorico(Request $request)
+    {
+        $fecha = $request->query('fecha'); // Ejemplo: '2023-10-15'
+        $sucursalId = $request->query('sucursal_id');
+
+        // Obtenemos todos los productos
+        $productos = Producto::with('categoria')->get();
+
+        $reporte = $productos->map(function ($producto) use ($fecha, $sucursalId) {
+            // Buscamos el último movimiento antes o durante esa fecha para esta sucursal
+            $ultimoMovimiento = InventarioMovimiento::where('producto_id', $producto->id)
+                ->where('sucursal_id', $sucursalId)
+                ->whereDate('created_at', '<=', $fecha)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            return [
+                'id' => $producto->id,
+                'nombre' => $producto->nombre,
+                'categoria' => $producto->categoria->nombre,
+                'codigo_barras' => $producto->codigo_barras,
+                // Si no hay movimientos, asumimos 0
+                'stock_al_dia' => $ultimoMovimiento ? (float)$ultimoMovimiento->stock_nuevo : 0,
+                'ultimo_mov_fecha' => $ultimoMovimiento ? $ultimoMovimiento->created_at : 'Sin movimientos'
+            ];
+        });
+
+        return response()->json($reporte);
     }
 }

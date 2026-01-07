@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Sucursal;
 use App\Models\Transferencia;
-use App\Services\InventarioService;
+use App\Models\SucursalProducto;
+use App\Models\InventarioMovimiento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -12,113 +14,134 @@ use Illuminate\Support\Facades\DB;
 class TransferenciaController extends Controller
 {
     /**
-     * Registra y envía una transferencia entre sucursales.
+     * PASO 1: Envío de Mercancía (Sucursal Origen)
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'sucursal_origen_id'  => 'required|exists:sucursales,id',
             'sucursal_destino_id' => 'required|exists:sucursales,id|different:sucursal_origen_id',
-            'notas'               => 'nullable|string|max:255',
             'productos'           => 'required|array|min:1',
-            'productos.*.id'       => 'required|exists:productos,id',
-            'productos.*.cantidad' => 'required|numeric|min:0.000001', // Precisión 14,6
+            'productos.*.id'      => 'required|exists:productos,id',
+            'productos.*.cantidad'=> 'required|numeric|min:0.000001',
         ]);
 
-        try {
-            $transferencia = DB::transaction(function () use ($validated) {
-                // 1. Crear la cabecera de la transferencia
-                $transfer = Transferencia::create([
-                    'sucursal_origen_id'  => $validated['sucursal_origen_id'],
-                    'sucursal_destino_id' => $validated['sucursal_destino_id'],
-                    'user_envia_id'       => Auth::id(),
-                    'estatus'             => 'Enviado',
-                    'fecha_envio'         => now(),
-                    'notas'               => $validated['notas']
+        return DB::transaction(function () use ($validated, $request) {
+            // 1. Crear cabecera
+            $transfer = Transferencia::create([
+                'sucursal_origen_id'  => $validated['sucursal_origen_id'],
+                'sucursal_destino_id' => $validated['sucursal_destino_id'],
+                'user_envia_id'       => Auth::id(),
+                'estatus'             => 'Enviado',
+                'fecha_envio'         => now(),
+                'notas'               => $request->notas
+            ]);
+
+            foreach ($validated['productos'] as $prod) {
+                // 2. Detalle
+                $transfer->detalles()->create([
+                    'producto_id'      => $prod['id'],
+                    'cantidad_enviada' => $prod['cantidad'],
                 ]);
 
-                foreach ($validated['productos'] as $prod) {
-                    // 2. Registrar el detalle de la transferencia
-                    $transfer->detalles()->create([
-                        'producto_id'      => $prod['id'],
-                        'cantidad_enviada' => $prod['cantidad'],
-                    ]);
+                // 3. Afectar Stock Origen
+                $stockOrigen = SucursalProducto::where('sucursal_id', $validated['sucursal_origen_id'])
+                    ->where('producto_id', $prod['id'])
+                    ->firstOrFail();
 
-                    // 3. Descontar stock de la sucursal ORIGEN usando el Servicio
-                    // Se envía el valor en negativo para representar la salida
-                    InventarioService::registrarMovimiento(
-                        $prod['id'],
-                        $validated['sucursal_origen_id'],
-                        -$prod['cantidad'],
-                        'Traspaso (Salida)',
-                        'Transferencia',
-                        $transfer->id,
-                        "Envío a sucursal destino #{$validated['sucursal_destino_id']}"
-                    );
-                }
+                $stockAnterior = (float) $stockOrigen->stock_actual;
+                $stockNuevo = $stockAnterior - (float) $prod['cantidad'];
 
-                return $transfer;
-            });
+                $stockOrigen->update(['stock_actual' => $stockNuevo]);
 
-            return response()->json([
-                'message' => 'Transferencia enviada correctamente',
-                'data' => $transferencia->load('detalles.producto')
-            ], 201);
+                $sucursal = Sucursal::findOrFail($validated['sucursal_destino_id']);
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error en el envío: ' . $e->getMessage()
-            ], 500);
-        }
+                // 4. KARDEX - SALIDA POR TRASPASO
+                InventarioMovimiento::create([
+                    'sucursal_id'     => $validated['sucursal_origen_id'],
+                    'producto_id'     => $prod['id'],
+                    'user_id'         => Auth::id(),
+                    'tipo_movimiento' => 'SALIDA POR TRASPASO',
+                    'cantidad'        => $prod['cantidad'],
+                    'stock_anterior'  => $stockAnterior,
+                    'stock_nuevo'     => $stockNuevo,
+                    'referencia_tipo' => 'Transferencia',
+                    'referencia_id'   => $transfer->id,
+                    'observaciones'   => "Envío a sucursal destino: {$sucursal->nombre}"
+                ]);
+            }
+
+            return response()->json(['message' => 'Transferencia enviada y stock de origen descontado']);
+        });
     }
 
-    // app/Http/Controllers/Api/TransferenciaController.php
+    public function show($id)
+    {
+        return Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'detalles.producto'])
+            ->findOrFail($id);
+    }
 
-    /**
-     * Lista transferencias enviadas hacia la sucursal del usuario
-     */
     public function pendientes()
     {
-        // En un sistema real, filtraríamos por la sucursal del usuario autenticado
-        return Transferencia::with(['sucursalOrigen', 'userEnvia', 'detalles.producto'])
-            ->where('estatus', 'Enviado')
-            ->orderBy('fecha_envio', 'desc')
-            ->get();
+        $user = auth()->user();
+        $query = Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'detalles.producto'])
+            ->where('estatus', 'Enviado');
+
+        $roles = $user->roles->pluck('name');
+
+        // Si NO es administrador, filtrar solo lo que va hacia SU sucursal
+        if ($roles[0] !== 'Administrador') {
+            $query->where('sucursal_destino_id', $user->sucursal_id);
+        }
+
+        return $query->orderBy('fecha_envio', 'desc')->get();
     }
 
-    /**
-     * Procesa la recepción física de la mercancía
-     */
     public function recibir(Request $request, $id)
     {
         $transferencia = Transferencia::findOrFail($id);
 
         return DB::transaction(function () use ($request, $transferencia) {
+            foreach ($request->productos as $item) {
+                // 1. Actualizar detalle
+                $detalle = $transferencia->detalles()->where('producto_id', $item['producto_id'])->first();
+                $detalle->update(['cantidad_recibida' => $item['cantidad_recibida']]);
+
+                // 2. Afectar Stock Destino (Update or Create)
+                $stockDestino = SucursalProducto::firstOrCreate(
+                    ['sucursal_id' => $transferencia->sucursal_destino_id, 'producto_id' => $item['producto_id']],
+                    ['stock_actual' => 0]
+                );
+
+                $stockAnterior = (float) $stockDestino->stock_actual;
+                $stockNuevo = $stockAnterior + (float) $item['cantidad_recibida'];
+
+                $stockDestino->update(['stock_actual' => $stockNuevo]);
+
+                $sucursal = Sucursal::findOrFail($transferencia->sucursal_destino_id);
+
+                // 3. KARDEX - ENTRADA POR TRASPASO
+                InventarioMovimiento::create([
+                    'sucursal_id'     => $transferencia->sucursal_destino_id,
+                    'producto_id'     => $item['producto_id'],
+                    'user_id'         => Auth::id(),
+                    'tipo_movimiento' => 'ENTRADA POR TRASPASO',
+                    'cantidad'        => $item['cantidad_recibida'],
+                    'stock_anterior'  => $stockAnterior,
+                    'stock_nuevo'     => $stockNuevo,
+                    'referencia_tipo' => 'Transferencia',
+                    'referencia_id'   => $transferencia->id,
+                    'observaciones'   => "Recepción desde sucursal origen #{$sucursal->nombre}"
+                ]);
+            }
+
             $transferencia->update([
                 'estatus' => 'Recibido',
                 'user_recibe_id' => Auth::id(),
                 'fecha_recepcion' => now(),
             ]);
 
-            foreach ($request->productos as $item) {
-                // 1. Actualizar la cantidad realmente recibida en el detalle
-                $detalle = $transferencia->detalles()->where('producto_id', $item['producto_id'])->first();
-                $detalle->update(['cantidad_recibida' => $item['cantidad_recibida']]);
-
-                // 2. Sumar stock a la sucursal DESTINO usando el Servicio
-                // Usamos la precisión 14,6 definida en la tabla sucursal_productos
-                InventarioService::registrarMovimiento(
-                    $item['producto_id'],
-                    $transferencia->sucursal_destino_id,
-                    $item['cantidad_recibida'],
-                    'Traspaso (Entrada)',
-                    'Transferencia',
-                    $transferencia->id,
-                    "Recepción desde sucursal #{$transferencia->sucursal_origen_id}"
-                );
-            }
-
-            return response()->json(['message' => 'Inventario actualizado correctamente']);
+            return response()->json(['message' => 'Inventario actualizado y recepción completada']);
         });
     }
 }

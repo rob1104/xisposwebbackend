@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
@@ -22,7 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
-
+    Route::get('dashboard/summary', [DashboardController::class, 'getSummary']);
     Route::get('/config', [ConfiguracionController::class, 'index']);
     Route::post('config/update', [ConfiguracionController::class, 'update']);
     Route::get('/user', function (Request $request) {
@@ -56,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('ventas', VentaController::class);
 
     Route::get('clientes/{îd}/antiguedad', [ClientesController::class, 'getAntiguedadSaldos'])->name('clientes.antiguedad');
+    Route::get('proveedores/{îd}/antiguedad', [ProveedorController::class, 'getAntiguedadSaldos'])->name('proveedores.antiguedad');
 
     Route::put('/compras/{id}/cancelar', [CompraController::class, 'cancelar'])->name('compras.cancelar');
     Route::put('/ventas/{id}/cancelar', [VentaController::class, 'cancelar'])->name('ventas.cancelar');
@@ -103,7 +105,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Reporte de inventario valorizado por sucursal
         Route::get('valorizado/{sucursal_id}', [InventarioController::class, 'reporteValorizado']);
+        Route::get('historico', [InventarioController::class, 'reporteHistorico'])->name('inventario.historico');
     });
+
+    // Kardex por producto
+    Route::get('productos/{id}/kardex', [InventarioController::class, 'getKardex']);
+
 
     Route::prefix('catalogos')->group(function () {
 
