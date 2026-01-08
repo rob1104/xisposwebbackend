@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('Ventas', function (Blueprint $table) {
+        Schema::table('ventas', function (Blueprint $table) {
             $table->enum('tipo_pago', ['Contado', 'Credito'])->default('Contado')->after('total');
             $table->date('fecha_vencimiento')->nullable()->after('tipo_pago');
         });
@@ -22,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('Ventas', function (Blueprint $table) {
+        Schema::table('ventas', function (Blueprint $table) {
             $table->dropColumn('tipo_pago', 'fecha_vencimiento');
         });
     }
