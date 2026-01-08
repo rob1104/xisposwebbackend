@@ -15,8 +15,8 @@ class InitialSetupSeeder extends Seeder
      */
     public function run(): void
     {
-        $sucursal1 = Sucursal::create(['nombre' => 'Sucursal Norte']);
-        $sucursal2 = Sucursal::create(['nombre' => 'Sucursal Sur']);
+        $sucursal1 = Sucursal::create(['nombre' => 'DIVISION DEL NORTE', 'prefijo' => 'DIV']);
+        $sucursal2 = Sucursal::create(['nombre' => 'PERIFERICO', 'prefijo' => 'PER']);
 
         $adminRole = Role::create(['name' => 'Administrador']);
         $gerenteRole = Role::create(['name' => 'Gerente']);
