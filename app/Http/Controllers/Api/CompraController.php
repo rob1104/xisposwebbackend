@@ -34,6 +34,7 @@ class CompraController extends Controller
     {
         $request->validate([
             'provider_id' => 'required|exists:providers,id',
+            'sucursale_id' => 'nullable|exists:sucursales,id',
             'metodo_pago' => 'required|in:CONTADO,CREDITO',
             'fecha' => 'required|date',
             'subtotal' => 'required|numeric',
@@ -45,10 +46,10 @@ class CompraController extends Controller
             'detalles.*.costo_unitario' => 'required|numeric|min:0',
         ]);
 
-        $sucursalId = $request->header('X-Sucursal-Id');
+        $sucursalId = $request->sucursale_id ?? $request->header('X-Sucursal-Id');
 
         if (!$sucursalId) {
-            return response()->json(['error' => 'Sucursal no identificada en los headers'], 400);
+            return response()->json(['error' => 'Debe especificar una sucursal para registrar la compra.'], 400);
         }
 
         return DB::transaction(function () use ($request, $sucursalId) {
@@ -108,7 +109,7 @@ class CompraController extends Controller
                     'stock_anterior' => $stockAnterior,
                     'stock_nuevo' => $stockNuevo,
                     'referencia_tipo' => 'COMPRA',
-                    'referencia_id' => $compra->folio,
+                    'referencia_id' => $compra->id,
                     'observaciones' => "Compra registrada con folio: " . $compra->folio
                 ]);
             }

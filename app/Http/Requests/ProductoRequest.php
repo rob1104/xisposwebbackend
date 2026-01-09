@@ -29,7 +29,7 @@ class ProductoRequest extends FormRequest
             'codigo_barras'       => ['required', 'string', 'max:64', Rule::unique('productos')->ignore($productoId)],
             'categoria_id'        => 'required|exists:categorias,id',
             'clave_prod_serv'     => 'required|string|size:8',
-            'clave_unidad'        => 'required|string|size:3',
+            'clave_unidad'        => 'required|string',
             'objeto_imp'          => 'required|string|size:2',
             'tipo_producto'       => 'required|in:Inventariable,Compuesto,Servicio',
             'ultimo_costo_compra' => 'required|numeric|min:0',
@@ -62,7 +62,7 @@ class ProductoRequest extends FormRequest
                     // Verificamos el tipo del producto hijo
                     $hijo = \App\Models\Producto::find($value);
                     if ($hijo && $hijo->tipo_producto === 'Compuesto') {
-                        $fail('La Nacional no permite anidamiento de kits: Un componente no puede ser otro producto compuesto.');
+                        $fail('No se permiten anidamiento de kits: Un componente no puede ser otro producto compuesto.');
                     }
                 },
             'componentes.*.cantidad' => 'numeric']

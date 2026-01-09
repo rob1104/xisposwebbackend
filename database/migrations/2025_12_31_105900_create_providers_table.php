@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('nombre_comercial', 100);
             $table->string('razon_social', 100)->nullable();
             $table->string('rfc', 24)->nullable();
-            $table->string('email', 99);
+            $table->string('email', 99)->nullable();
             $table->string('telefono', 30)->nullable();
             $table->string('telefono2', 30)->nullable();
             $table->string('contacto', 64)->nullable();

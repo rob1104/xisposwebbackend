@@ -6,10 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ClienteRequest;
 use App\Models\Cliente;
 use App\Models\Venta;
-use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class ClientesController extends Controller
+class ClientesController extends Controller implements HasMiddleware
 {
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('permission:clientes.ver', only: ['index']),
+            new Middleware('permission:clientes.crear', only: ['store']),
+            new Middleware('permission:clientes.editar', only: ['update']),
+            new Middleware('permission:clientes.borrar', only: ['destroy']),
+        ];
+    }
     public function index()
     {
         return response()->json(Cliente::orderBy('razon_social')->get());
@@ -40,8 +50,26 @@ class ClientesController extends Controller
 
     public function destroy(Cliente $cliente)
     {
+        if ($cliente->id == 1) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Protección de Sistema: No se puede eliminar al cliente PUBLICO GENERAL.'
+            ], 422);
+        }
+
+        if ($cliente->ventas()->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No es posible eliminar este cliente porque ya cuenta con historial de ventas.'
+            ], 422);
+        }
+
         $cliente->delete();
-        return response()->json(['message' => 'Cliente eliminado']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cliente eliminado correctamente.'
+        ]);
     }
 
     public function getAntiguedadSaldos($id)

@@ -55,7 +55,7 @@ class ClienteRequest extends FormRequest
             'obs'              => 'nullable|string',
             'tax_regime_id'    => 'nullable|exists:tax_regimes,id',
             'email' => [
-                'required',
+                'nullable',
                 'email',
                 Rule::unique('clientes', 'email')->ignore($clienteId)
             ],

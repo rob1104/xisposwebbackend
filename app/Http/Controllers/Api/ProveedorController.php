@@ -48,17 +48,41 @@ class ProveedorController extends Controller
 
     public function destroy(Provider $provider)
     {
-        $nombre = $provider->nombre_comercial;
-        $provider->delete();
+        // 1. Buscamos el proveedor
+        $proveedor = Provider::find($provider->id);
 
-        return response()->json([
-            'message' => 'El proveedor "' . $nombre . '" ha sido eliminado del sistema.'
-        ]);
+        if (!$proveedor) {
+            return response()->json([
+                'message' => 'El proveedor no existe o ya ha sido eliminado.'
+            ], 404);
+        }
+
+        // 2. Regla de Negocio: Validar que no tenga compras vinculadas
+        // Esto evita errores de llave foránea (Foreign Key Constraint)
+        if ($proveedor->compras()->exists()) {
+            return response()->json([
+                'message' => 'No se puede eliminar: Este proveedor tiene compras registradas en el historial.'
+            ], 422);
+        }
+
+
+        try {
+            $proveedor->delete();
+
+            return response()->json([
+                'message' => 'Proveedor eliminado exitosamente.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al intentar eliminar el registro: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function getAntiguedadSaldos($id)
     {
-        $compras = Compra::where('proveedor_id', $id)
+        $compras = Compra::where('provider_id', $id)
             ->where('saldo', '>', 0)
             ->get();
 
@@ -73,7 +97,7 @@ class ProveedorController extends Controller
         ];
 
         foreach($compras as $compra) {
-            $dias = $compra->fecha_emision->diffInDays($now);
+            $dias = $compra->created_at->diffInDays($now);
             $monto = $compra->saldo_pendiente;
 
             if ($dias <= 0) $buckets['corriente'] += $monto;

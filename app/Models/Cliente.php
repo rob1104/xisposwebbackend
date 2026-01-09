@@ -10,6 +10,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Cliente extends Model
 {
     use LogsActivity;
+
     protected $fillable = [
         'numero_global', 'nombre_comercial', 'razon_social', 'rfc', 'email',
         'telefono', 'telefono2', 'contacto', 'calle', 'no_exterior', 'no_interior',
@@ -17,6 +18,11 @@ class Cliente extends Model
         'saldo_actual', 'ultimo_pago', 'obs', 'usuario_creador', 'tax_regime_id', 'tipo_pago',
         'dias_credito', 'vender_vencido'
     ];
+
+    public function ventas()
+    {
+        return $this->hasMany(Venta::class);
+    }
 
     protected static function boot()
     {

@@ -30,7 +30,25 @@ class ProductoController extends Controller
             $producto = Producto::create($request->validated() + [
                     'usuario_creador' => auth()->user()->name
                 ]);
-            $this->syncRelations($producto, $request);
+
+            if ($request->has('impuestos')) {
+                $producto->impuestos()->sync($request->impuestos);
+            }
+
+            if ($request->has('precios')) {
+                $producto->precios()->delete();
+                $producto->precios()->createMany($request->precios);
+            }
+
+            if ($request->tipo_producto === 'Compuesto') {
+                foreach ($request->componentes as $item) {
+                    // Aquí es donde entra tu lógica de 'producto_padre_id', 'producto_hijo_id' y 'cantidad'
+                    $producto->componentes()->attach($item['id'], [
+                        'cantidad' => $item['cantidad']
+                    ]);
+                }
+            }
+
             $sucursales = Sucursal::all();
             foreach ($sucursales as $sucursal) {
                 $producto->sucursales()->attach($sucursal->id, [

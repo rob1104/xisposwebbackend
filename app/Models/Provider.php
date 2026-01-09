@@ -37,6 +37,11 @@ class Provider extends Model
         });
     }
 
+    public function compras()
+    {
+        return $this->hasMany(Compra::class);
+    }
+
     private static function generateUniqueNumber()
     {
         do {
