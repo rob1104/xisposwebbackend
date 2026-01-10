@@ -25,6 +25,7 @@ class ProductoRequest extends FormRequest
         $productoId = $this->route('producto') ? $this->route('producto')->id : null;
 
         return [
+            'status'              => 'required|boolean',
             'nombre'              => 'required|string|max:150',
             'codigo_barras'       => ['required', 'string', 'max:64', Rule::unique('productos')->ignore($productoId)],
             'categoria_id'        => 'required|exists:categorias,id',

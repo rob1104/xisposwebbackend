@@ -28,7 +28,7 @@ class Compra extends Model
     ];
 
 
-    public function sucursal() { return $this->belongsTo(Sucursal::class); }
+    public function sucursal() { return $this->belongsTo(Sucursal::class, 'sucursale_id', 'id'); }
     public function provider() { return $this->belongsTo(Provider::class); }
     public function user() { return $this->belongsTo(User::class); }
     public function detalles() { return $this->hasMany(CompraDetalle::class); }

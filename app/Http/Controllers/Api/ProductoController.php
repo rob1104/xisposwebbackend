@@ -14,7 +14,6 @@ class ProductoController extends Controller
     public function index()
     {
         return Producto::with(['categoria', 'impuestos', 'precios', 'componentes'])
-            ->where('status', true)
             ->get();
     }
 
@@ -65,7 +64,7 @@ class ProductoController extends Controller
         return DB::transaction(function () use ($request, $producto) {
             $producto->update($request->only([
                 'nombre', 'codigo_barras', 'categoria_id', 'tipo_producto',
-                'clave_prod_serv', 'clave_unidad'
+                'clave_prod_serv', 'clave_unidad', 'status'
             ]));
 
             if ($request->has('impuestos')) {
@@ -107,7 +106,7 @@ class ProductoController extends Controller
             if ($tieneVentas && $tieneMovimientos) $causa = 'ventas y movimientos de inventario';
 
             return response()->json([
-                'message' => "Restricción de Integridad: No se puede eliminar el producto porque cuenta con {$causa}. Se recomienda marcarlo como 'Inactivo'."
+                'message' => "No se puede eliminar el producto porque cuenta con {$causa}. Se recomienda marcarlo como 'Inactivo'."
             ], 422);
         }
 
@@ -115,8 +114,8 @@ class ProductoController extends Controller
             return response()->json(['message' => 'No se puede eliminar: es componente de un producto compuesto'], 422);
         }
 
-        $producto->update(['status' => false]);
-        return response()->json(['message' => 'Producto dado de baja correctamente']);
+        $producto->delete();
+        return response()->json(['message' => 'Producto eliminado correctamente']);
     }
 
     public function search(Request $request)

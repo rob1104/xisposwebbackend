@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Compra;
 use App\Models\InventarioMovimiento;
+use App\Models\Setting;
 use App\Models\Sucursal;
 use App\Models\SucursalProducto;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -121,6 +123,26 @@ class CompraController extends Controller
         });
     }
 
+    public function show($id)
+    {
+        try {
+            // Buscamos la compra y cargamos todas las relaciones necesarias para el modal Premium
+            $compra = Compra::with([
+                'provider',
+                'user',
+                'sucursal',
+                'detalles.producto' // Cargamos los detalles y el producto asociado a cada detalle
+            ])->findOrFail($id);
+
+            return response()->json($compra);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'No se encontró la compra solicitada o no tiene permisos.',
+                'error' => $e->getMessage()
+            ], 404);
+        }
+    }
+
     public function cancelar(Request $request, $id)
     {
         $request->validate([
@@ -169,6 +191,55 @@ class CompraController extends Controller
 
             return response()->json(['message' => 'Compra cancelada e inventario actualizado']);
         });
+    }
+
+    public function descargarPDF($id)
+    {
+        // Cargamos la compra con TODAS sus relaciones
+        $compra = Compra::with(['provider', 'user', 'sucursal', 'detalles.producto'])->findOrFail($id);
+
+        $logoUrl = Setting::where('clave', 'logo_url')->value('valor');
+
+        // Opcional: Convertir logo a Base64 para que DomPDF lo renderice sin problemas de rutas
+        $logoBase64 = '';
+
+        if ($logoUrl) {
+            try {
+                /**
+                 * AJUSTE PARA URL LOCALHOST:
+                 * Extraemos solo la ruta (path) de la URL para buscarla en el disco local.
+                 * De: http://localhost:8000/uploads/logo/imagen.jpg
+                 * Obtenemos: uploads/logo/imagen.jpg
+                 */
+                $parsedUrl = parse_url($logoUrl, PHP_URL_PATH); // Obtiene "/uploads/logo/..."
+                $cleanPath = ltrim($parsedUrl, '/'); // Quita la primera "/" para que sea "uploads/logo/..."
+
+                // Construimos la ruta absoluta al disco (Carpeta Public)
+                $absolutePath = public_path($cleanPath);
+
+                if (file_exists($absolutePath)) {
+                    $imageContent = file_get_contents($absolutePath);
+                    $type = pathinfo($absolutePath, PATHINFO_EXTENSION);
+                    $logoBase64 = 'data:image/' . $type . ';base64,' . base64_encode($imageContent);
+                } else {
+                    \Log::warning("Logo no encontrado en ruta física: " . $absolutePath);
+                }
+            } catch (\Exception $e) {
+                \Log::error("Error procesando logo en PDF: " . $e->getMessage());
+            }
+        }
+
+        // Generamos la vista y la cargamos en el PDF
+        $pdf = Pdf::loadView('pdf.compra_detalle', [
+            'compra' => $compra,
+            'logo' => $logoBase64
+        ]);
+
+        // Establecemos formato papel (ej. Carta)
+        $pdf->setPaper('letter', 'portrait');
+
+        // Retornamos el archivo para descarga con el nombre del folio
+        return $pdf->download("Compra_{$compra->folio}.pdf");
     }
 
     private function generarFolioUnico($sucursalId)

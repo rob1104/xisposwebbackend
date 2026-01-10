@@ -168,4 +168,20 @@ class PosController extends Controller
                     ->latest()->first();
     }
 
+    public function obtenerSugerenciaApertura(Request $request)
+    {
+        $sucursal_id = $request->header('X-Sucursal-Id');
+
+        // Buscamos el último turno cerrado de esta sucursal
+        $ultimoTurno = CajaTurno::where('sucursale_id', $sucursal_id)
+            ->where('status', 'Cerrado')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        return response()->json([
+            // Si no hay turnos previos, sugerimos 1.00 por defecto
+            'tipo_cambio' => $ultimoTurno ? $ultimoTurno->tipo_cambio : 18.00
+        ]);
+    }
+
 }

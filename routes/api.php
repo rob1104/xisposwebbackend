@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuditController;
+use App\Http\Controllers\Api\CajaMovimientoController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
@@ -55,6 +56,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('sucursales', SucursalController::class);
     Route::apiResource('compras', CompraController::class);
     Route::apiResource('ventas', VentaController::class);
+
+    Route::get('/compras/{id}/pdf', [CompraController::class, 'descargarPDF'])->name('compras.pdf');
+
+    Route::post('/caja/movimientos', [CajaMovimientoController::class, 'store'])->name('caja.movimientos.store');
 
     Route::get('clientes/{îd}/antiguedad', [ClientesController::class, 'getAntiguedadSaldos'])->name('clientes.antiguedad');
     Route::get('proveedores/{îd}/antiguedad', [ProveedorController::class, 'getAntiguedadSaldos'])->name('proveedores.antiguedad');
@@ -148,6 +153,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/balance-turno/{id}', [PosController::class, 'balanceTurno']);
         Route::post('/cerrar-turno', [PosController::class, 'cerrarTurno']);
         Route::get('/ultimo-ticket', [PosController::class, 'getUltimoTicket']);
+        Route::get('/sugerencia-apertura', [PosController::class, 'obtenerSugerenciaApertura'])->name('pos.sugerencia-apertura');
     });
 
     Route::post('perfil/update-name', [PerfilController::class, 'updateName']);
