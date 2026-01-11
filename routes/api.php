@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\CajaMovimientoController;
+use App\Http\Controllers\Api\CajaTurnoController;
 use App\Http\Controllers\Api\CatalogoController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
@@ -155,6 +156,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/ultimo-ticket', [PosController::class, 'getUltimoTicket']);
         Route::get('/sugerencia-apertura', [PosController::class, 'obtenerSugerenciaApertura'])->name('pos.sugerencia-apertura');
     });
+
+    Route::get('/turnos', [CajaTurnoController::class, 'index'])->name('caja.turnos.index');
+    Route::get('/turnos/pdf/{id}', [CajaTurnoController::class, 'downloadPdf'])->name('caja.turnos.downloadpdf');
 
     Route::post('perfil/update-name', [PerfilController::class, 'updateName']);
     Route::post('perfil/update-password', [PerfilController::class, 'updatePassword']);

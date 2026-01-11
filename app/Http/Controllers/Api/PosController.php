@@ -47,8 +47,12 @@ class PosController extends Controller
     {
         $turno = CajaTurno::findOrFail($id);
 
-        // Sumamos ventas pagadas en efectivo neto (Monto - Cambio)
-        $efectivoVentas = DB::table('venta_pagos')
+        // Mantenemos tu variable original de saldo inicial
+        $fondoApertura = $turno->saldo_inicial;
+
+        // 1. EFECTIVO: Sumamos ventas pagadas en efectivo neto (Monto - Cambio)
+        // Tal cual como lo tenías, filtrando por estado 'Completada'
+        $ventasEfectivo = DB::table('venta_pagos')
             ->join('ventas', 'venta_pagos.venta_id', '=', 'ventas.id')
             ->where('ventas.caja_turno_id', $id)
             ->where('ventas.status', 'Completada')
@@ -56,13 +60,41 @@ class PosController extends Controller
             ->selectRaw('SUM(monto - IFNULL(cambio_entregado, 0)) as total')
             ->value('total') ?? 0;
 
-        // Balance = Saldo Inicial + Ventas Efectivo + Entradas Caja - Salidas Caja
-        $balanceEfectivo = (float)$turno->saldo_inicial + (float)$efectivoVentas;
+        // 2. TARJETA: Sumamos ventas pagadas con tarjeta
+        // Nota: Aquí no restamos cambio ya que en tarjeta el monto es exacto
+        $ventasTarjeta = DB::table('venta_pagos')
+            ->join('ventas', 'venta_pagos.venta_id', '=', 'ventas.id')
+            ->where('ventas.caja_turno_id', $id)
+            ->where('ventas.status', 'Completada')
+            ->where('venta_pagos.metodo_pago', 'Tarjeta')
+            ->sum('monto') ?? 0;
+
+        // 3. MOVIMIENTOS: Entradas y Salidas manuales de efectivo
+        // He mantenido el nombre de la tabla 'caja_momivientos' como estaba en tu código
+        $movimientos = DB::table('caja_momivientos')
+            ->where('caja_turno_id', $turno->id)
+            ->select(DB::raw("
+            SUM(CASE WHEN tipo = 'Ingreso' THEN monto ELSE 0 END) as entradas,
+            SUM(CASE WHEN tipo = 'Egreso' THEN monto ELSE 0 END) as salidas
+        "))->first();
+
+        // 4. CÁLCULOS FINALES
+        $efectivoEsperado = $fondoApertura + $ventasEfectivo + ($movimientos->entradas ?? 0) - ($movimientos->salidas ?? 0);
+        $totalGeneral = $efectivoEsperado + $ventasTarjeta;
+
+
 
         return response()->json([
-            'balance_efectivo' => $balanceEfectivo,
-            'ventas_efectivo' => $efectivoVentas,
-            'fondo_inicial' => $turno->saldo_inicial
+            'efectivo_esperado' => round($efectivoEsperado, 2),
+            'tarjeta_esperado' => round($ventasTarjeta, 2),
+            'total_general' => round($totalGeneral, 2),
+            'detalle' => [
+                'fondo' => $fondoApertura,
+                'ventas_efectivo' => $ventasEfectivo,
+                'ventas_tarjeta' => $ventasTarjeta,
+                'entradas' => $movimientos->entradas ?? 0,
+                'salidas' => $movimientos->salidas ?? 0
+            ]
         ]);
     }
 
@@ -75,7 +107,9 @@ class PosController extends Controller
             'turno_id' => 'required',
             'efectivo_contado' => 'required|numeric',
             'diferencia' => 'required|numeric',
-            'denominaciones' => 'required|array'
+            'denominaciones' => 'required|array',
+            'tarjeta_esperado' => 'required|numeric',
+            'tarjeta_contado' => 'required|numeric',
         ]);
 
         $turno = CajaTurno::findOrFail($request->turno_id);
@@ -84,6 +118,8 @@ class PosController extends Controller
             $turno->update([
                 'cerrado_at' => now(),
                 'saldo_cierre' => $request->efectivo_contado,
+                'tarjeta_esperado' => $request->tarjeta_esperado,
+                'tarjeta_contado' => $request->tarjeta_contado,
                 'diferencia' => $request->diferencia,
                 'status' => 'Cerrado',
                 'denominaciones_arqueo' =>$request->denominaciones
@@ -164,7 +200,7 @@ class PosController extends Controller
     {
         return Venta::where('sucursale_id', $request->user()->sucursal_activa_id)
                     ->where('user_id', $request->user()->id)
-                    ->with(['detalles', 'cliente', 'detalles.producto','sucursal', 'sucursal.ticket'])
+                    ->with(['detalles', 'cliente', 'detalles.producto','sucursal', 'sucursal.ticket', 'pagos'])
                     ->latest()->first();
     }
 

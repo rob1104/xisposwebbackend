@@ -18,16 +18,12 @@ class VentaController extends Controller
 {
     public function index(Request $request)
     {
-
         $sucursalId = $request->header('X-Sucursal-Id');
-
         $query = Venta::with(['cliente', 'pagos', 'user'])
             ->orderBy('created_at', 'desc');
-
         if ($sucursalId) {
             $query->where('sucursale_id', $sucursalId);
         }
-
         return response()->json($query->get());
     }
 
@@ -162,6 +158,9 @@ class VentaController extends Controller
                     $venta->pagos()->create([
                         'metodo_pago' => $pago['metodo_pago'],
                         'monto' => $pago['monto'],
+                        'moneda' => $pago['moneda'] ?? 'MXN',
+                        'monto_original' => $pago['monto_original'] ?? $pago['monto'],
+                        'tipo_cambio_usado' => $pago['tc_aplicado'] ?? $turno->tipo_cambio,
                         'referencia_pago' => $pago['referencia_pago'] ?? null,
                         'tarjeta_ultimos_4' => $pago['tarjeta_ultimos_4'] ?? null,
                         'efectivo_recibido' => $pago['efectivo_recibido'] ?? null,

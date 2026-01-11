@@ -20,7 +20,9 @@ class CajaTurno extends Model
         'status',
         'denominaciones_arqueo',
         'saldo_cierre',
-        'diferencia'
+        'diferencia',
+        'tarjeta_esperado',
+        'tarjeta_contado'
     ];
 
     protected $casts = [
@@ -34,6 +36,13 @@ class CajaTurno extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function sucursal()
+    {
+        return $this->belongsTo(Sucursal::class, 'sucursale_id', 'id');
+    }
+
+    public function movimientos() { return $this->hasMany(CajaMomiviento::class); }
 
     public function getActivitylogOptions(): LogOptions
     {

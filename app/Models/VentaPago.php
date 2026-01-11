@@ -18,7 +18,10 @@ class VentaPago extends Model
         'cambio_entregado',
         'tarjeta_ultimos_4',
         'referencia_pago',
-        'banco_emisor'
+        'banco_emisor',
+        'moneda',
+        'monto_original',
+        'tipo_cambio_usado'
     ];
 
     public function venta() { return $this->belongsTo(Venta::class); }
