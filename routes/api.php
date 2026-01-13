@@ -11,7 +11,6 @@ use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
 use App\Http\Controllers\Api\ProveedorController;
-use App\Http\Controllers\Api\QZController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TransferenciaController;
@@ -47,7 +46,10 @@ Route::middleware('auth:sanctum')->group(function () {
             ->get(['id', 'nombre_comercial', 'rfc', 'limite_credito', 'saldo_actual', 'dias_credito', 'vender_vencido']);
     });
 
-    Route::get('/productos/search', [ProductoController::class, 'search']);
+    Route::get('/productos/search', [ProductoController::class, 'search'])->name('productos.buscar');
+    Route::get('/productos/{id}/precios', [ProductoController::class, 'getPrecios'])->name('productos.precios');
+    Route::get('/auth/gerentes', [UserController::class, 'getGerentes'])->name('auth.obtener-gerentes');
+    Route::post('/auth/verificar-gerente', [UserController::class, 'verificarGerente'])->name('auth.verificar-gerente');
 
     Route::apiResource('users', UserController::class);
     Route::apiResource('roles', RoleController::class);
@@ -69,8 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/ventas/{id}/cancelar', [VentaController::class, 'cancelar'])->name('ventas.cancelar');
 
     Route::get('/roles-list', [UserController::class, 'getRoles'])->name('roles.list');
-    Route::get('/permissions-all', [RoleController::class, 'getAllPermissions']);
-
+    Route::get('/permissions-all', [RoleController::class, 'getAllPermissions']->name('permissions.all');
 
     Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar']);
 
@@ -79,7 +80,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::get('/logs', [AuditController::class, 'index'])->name('logs.index');
 
-    // --- MÓDULO DE TRANSFERENCIAS ENTRE SUCURSALES ---
+    // --- MÓDULO DE TRANSFERENCIAS ENTRE SUCURSALES --
     Route::prefix('transferencias')->group(function () {
         // Listar envíos que vienen en camino hacia la sucursal
         Route::get('pendientes', [TransferenciaController::class, 'pendientes']);

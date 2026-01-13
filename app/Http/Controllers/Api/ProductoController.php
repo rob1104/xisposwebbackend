@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ProductoRequest;
 use App\Models\Producto;
+use App\Models\ProductoPrecio;
 use App\Models\Sucursal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,15 @@ class ProductoController extends Controller
                     ->orWhere('codigo_barras', 'LIKE', "%{$query}%");
             })
             ->get(['id', 'nombre', 'codigo_barras', 'tipo_producto']);
+    }
+
+    public function getPrecios($id)
+    {
+        $precios = ProductoPrecio::where('producto_id', $id)
+            ->select('id', 'nombre_lista', 'precio')
+            ->get();
+
+        return response()->json($precios);
     }
 
     private function syncRelations(Producto $producto, $request)

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CajaTurno;
 use App\Models\Cliente;
 use App\Models\InventarioMovimiento;
+use App\Models\PrecioModificacion;
 use App\Models\Producto;
 use App\Models\Sucursal;
 use App\Models\Ticket;
@@ -152,6 +153,7 @@ class VentaController extends Controller
             ]);
 
             $venta->detalles()->createMany($detallesParaInsertar);
+            $this->guardaCambiosDePrecio($request, $venta);
 
             if ($request->tipo_pago === 'Contado') {
                 foreach ($request->pagos as $pago) {
@@ -230,6 +232,23 @@ class VentaController extends Controller
 
             return response()->json(['message' => "Venta {$venta->folio} anulada y stock restablecido."]);
         });
+    }
+
+    private function guardaCambiosDePrecio(Request $request, $venta)
+    {
+        foreach ($request->items as $item) {
+            if (isset($item['motivo_cambio'])) {
+                PrecioModificacion::create([
+                    'venta_id'        => $venta->id,
+                    'producto_id'     => $item['id'],
+                    'user_id'         => auth()->id(),
+                    'autorizado_por'  => $item['autorizado_por'],
+                    'precio_original' => $item['precio_original'],
+                    'precio_nuevo'    => $item['precio'],
+                    'motivo'          => $item['motivo_cambio']
+                ]);
+            }
+        }
     }
 
     /**

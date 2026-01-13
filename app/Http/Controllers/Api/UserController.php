@@ -7,6 +7,7 @@ use App\Http\Requests\UserRequest;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
@@ -85,6 +86,36 @@ class UserController extends Controller
         return response()->json([
             'message' => 'Usuario eliminado de los registros.'
         ]);
+    }
+
+    public function getGerentes()
+    {
+        return User::role(['Administrador', 'Gerente'])
+            ->select('id', 'name', 'email')
+            ->get();
+    }
+
+    public function verificarGerente(Request $request)
+    {
+        $request->validate([
+            'user_id'  => 'required|exists:users,id',
+            'password' => 'required|string'
+        ]);
+
+        $gerente = User::find($request->user_id);
+
+        // Verificamos que el usuario tenga el rol y la contraseña coincida
+        if ($gerente->hasAnyRole(['Administrador', 'Gerente']) &&
+            Hash::check($request->password, $gerente->password)) {
+            return response()->json([
+                'success' => true,
+                'autorizadopor' => $gerente->name
+            ]);
+        }
+
+        // Usamos 422 para que el frontend lo trate como error de formulario y no de sesión
+        return response()->json(['message' => 'Contraseña incorrecta para este gerente'], 422);
+
     }
 
     public function asignarSucursalActiva(Request $request, $user_id)
