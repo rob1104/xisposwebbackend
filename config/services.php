@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'finkok' => [
+        'username'      => env('FINKOK_USERNAME'),
+        'password'      => env('FINKOK_PASSWORD'),
+        'url_stamp'     => env('FINKOK_URL_STAMP'),
+        'url_utilities' => env('FINKOK_URL_UTILITIES'),
+    ],
+
 ];

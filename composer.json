@@ -15,7 +15,10 @@
         "laravel/tinker": "^2.10.1",
         "laraveles/spanish": "^1.5",
         "spatie/laravel-activitylog": "^4.10",
-        "spatie/laravel-permission": "^6.24"
+        "spatie/laravel-permission": "^6.24",
+        "ext-soap": "*",
+        "ext-dom": "*",
+        "ext-xsl": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

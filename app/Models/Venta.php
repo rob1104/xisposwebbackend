@@ -60,6 +60,12 @@ class Venta extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function scopeAptasParaFacturar($query)
+    {
+        return $query->whereNull('cfdi_id') // No tiene factura asociada
+        ->where('status', '!=', 'Cancelada'); // No está cancelada
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

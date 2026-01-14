@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\CajaMovimientoController;
 use App\Http\Controllers\Api\CajaTurnoController;
 use App\Http\Controllers\Api\CatalogoController;
+use App\Http\Controllers\Api\CfdiController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\DashboardController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\ConfiguracionController;
 use App\Http\Controllers\PerfilController;
 use App\Http\Controllers\TicketController;
 use App\Models\TaxRegime;
+use App\Services\FinkokService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +61,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('sucursales', SucursalController::class);
     Route::apiResource('compras', CompraController::class);
     Route::apiResource('ventas', VentaController::class);
+    Route::apiResource('cfdis', CfdiController::class);
+
+    Route::post('/sucursales/{id}/emisor', [SucursalController::class, 'updateEmisor'])->name('sucursales.emisor.update');
+    Route::get('/sucursales/{id}/emisor', [SucursalController::class, 'getEmisor'])->name('sucursales.emisor.get');
 
     Route::get('/compras/{id}/pdf', [CompraController::class, 'descargarPDF'])->name('compras.pdf');
 
@@ -71,7 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/ventas/{id}/cancelar', [VentaController::class, 'cancelar'])->name('ventas.cancelar');
 
     Route::get('/roles-list', [UserController::class, 'getRoles'])->name('roles.list');
-    Route::get('/permissions-all', [RoleController::class, 'getAllPermissions']->name('permissions.all');
+    Route::get('/permissions-all', [RoleController::class, 'getAllPermissions'])->name('permissions.all');
 
     Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar']);
 
@@ -172,3 +178,7 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::get('/config', [ConfiguracionController::class, 'index']);
+
+Route::get('/test-finkok', function (FinkokService $finkok) {
+    return response()->json($finkok->testConnection());
+});

@@ -12,7 +12,9 @@ class Sucursal extends Model
     protected $table = 'sucursales';
 
     protected $fillable = [
-        'nombre','direccion','telefono'
+        'nombre', 'direccion', 'telefono',
+        'sucursale_id',
+        'codigo_postal'
     ];
     public function users()
     {
@@ -23,6 +25,8 @@ class Sucursal extends Model
     {
         return $this->hasOne(Ticket::class, "sucursale_id", "id");
     }
+
+    public function emisor() { return $this->hasOne(SucursalEmisor::class, "sucursale_id", "id"); }
 
     public function getActivitylogOptions(): LogOptions
     {
