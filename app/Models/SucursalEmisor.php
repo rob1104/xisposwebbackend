@@ -24,6 +24,7 @@ class SucursalEmisor extends Model
         'password_csd'
     ];
 
+    public function sucursale() { return $this->belongsTo(Sucursal::class, "sucursale_id", "id"); }
 
     public function getActivitylogOptions(): LogOptions
     {
