@@ -46,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
                         'select column_name as `name`, data_type as `type_name`, column_type as `type`, ' .
                         'collation_name as `collation`, is_nullable as `nullable`, ' .
                         'column_default as `default`, column_comment as `comment`, ' .
+                        'NULL as `expression`, ' . // <--- Agregamos NULL con el alias 'expression'
                         'extra as `extra` from information_schema.columns ' .
                         'where table_schema = schema() and table_name = %s ' .
                         'order by ordinal_position asc',
