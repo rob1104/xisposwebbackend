@@ -14,7 +14,8 @@ class Sucursal extends Model
     protected $fillable = [
         'nombre', 'direccion', 'telefono',
         'sucursale_id',
-        'codigo_postal'
+        'codigo_postal',
+        'prefijo'
     ];
     public function users()
     {

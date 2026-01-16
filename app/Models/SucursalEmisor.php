@@ -33,5 +33,4 @@ class SucursalEmisor extends Model
             ->logOnlyDirty()
             ->useLogName('sucursales_emisor'); // Categoría del log
     }
-
 }

@@ -101,19 +101,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('historial', [TransferenciaController::class, 'index']);
     });
 
-
     // --- MÓDULO DE INVENTARIOS Y KARDEX ---
     Route::prefix('inventario')->group(function () {
         Route::get('/', [InventarioController::class, 'index'])->name('inventario.index');
         Route::get('/buscar-filtro', [InventarioController::class, 'buscarProducto'])->name('inventario.buscar');
         Route::get('/stock-especifico', [InventarioController::class, 'obtenerStockActual'])->name('inventario.obtener-stock-actual');
         Route::post('/movimiento', [InventarioController::class, 'registrarMovimiento']);
-        //Todas las sucursales
         ROute::get(('/reporte-consolidado'), [InventarioController::class, 'reporteConsolidado']);
         // Consulta de stock en todas las sucursales para un producto
         Route::get('stock-global/{producto_id}', [InventarioController::class, 'stockGlobal']);
 
-        // El historial detallado de movimientos (Auditoría)
+        // El historial detallado de movimientos (Kardex)
         Route::get('kardex/{producto_id}', [InventarioController::class, 'kardexPorProducto']);
 
         // Reporte de inventario valorizado por sucursal

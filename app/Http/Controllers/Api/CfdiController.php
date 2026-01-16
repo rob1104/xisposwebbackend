@@ -19,6 +19,32 @@ class CfdiController extends Controller
         $this->finkok = $finkok;
     }
 
+    public function index(Request $request)
+    {
+        $query = Cfdi::query()->with('sucursal');
+
+        // Filtrado por sucursal seleccionada
+        if ($request->has('sucursal_id')) {
+            $query->where('sucursale_id', $request->sucursal_id);
+        }
+
+        $facturas = $query->orderBy('created_at', 'desc')->get()->map(function($f) {
+            return [
+                'id' => $f->id,
+                'serie' => $f->serie,
+                'folio' => $f->folio,
+                'fecha_only' => $f->created_at->format('d/m/Y'),
+                'hora_only' => $f->created_at->format('H:i:s'),
+                'receptor_nombre' => $f->receptor_nombre,
+                'receptor_rfc' => $f->receptor_rfc,
+                'total' => (float) $f->total,
+                'uuid' => $f->uuid,
+                'status' => $f->status,
+            ];
+        });
+        return response()->json($facturas);
+    }
+
     public function store(Request $request)
     {
         // 1. Validar que las ventas seleccionadas existan y no estén facturadas (Candado)

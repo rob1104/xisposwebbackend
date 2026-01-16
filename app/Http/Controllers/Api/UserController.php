@@ -76,13 +76,23 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        // 1. Evitar que se elimine a sí mismo (Ya lo tenías)
         if ($user->id === auth()->id()) {
             return response()->json([
                 'message' => 'Operación denegada: No puedes eliminar tu propia cuenta.'
             ], 403);
         }
 
+        // 2. NUEVA VALIDACIÓN: Verificar si tiene sucursales asignadas
+        // Usamos exists() para que la consulta sea rápida y eficiente
+        if ($user->sucursales()->exists()) {
+            return response()->json([
+                'message' => "No se puede eliminar a {$user->name} porque tiene sucursales asignadas. Desvincúlelas primero."
+            ], 422);
+        }
+
         $user->delete();
+
         return response()->json([
             'message' => 'Usuario eliminado de los registros.'
         ]);
