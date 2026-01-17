@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
 use App\Http\Controllers\Api\ProveedorController;
+use App\Http\Controllers\Api\ReportesController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TransferenciaController;
@@ -30,6 +31,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/summary', [DashboardController::class, 'getSummary']);
     Route::get('/config', [ConfiguracionController::class, 'index']);
     Route::post('config/update', [ConfiguracionController::class, 'update']);
+    Route::post('/config/sincronizar-inventarios', [ConfiguracionController::class, 'sincronizarInventariosCero']);
+
     Route::get('/user', function (Request $request) {
         $user = $request->user();
         return [
@@ -64,13 +67,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('ventas', VentaController::class);
     Route::apiResource('cfdis', CfdiController::class);
 
-    Route::post('/cfdis/timbrar', [CfdiController::class, 'timbrar'])->name('cfdis.timbrar');
-    Route::get('/cfdis/{id}/xml', [CfdiController::class, 'descargarXml']);
-    Route::post('/cfdis/{id}/reintentar', [CfdiController::class, 'reintentar']);
-    Route::get('/cfdis/{id}/pdf', [CfdiController::class, 'descargarPdf']);
-    Route::post('/cfdis/{id}/generar-pdf', [CfdiController::class, 'generarPdf']);
-
-    Route::get('/cfdis/ventas/pendientes', [CfdiController::class, 'ventasPendientes'])->name('cfdis.ventas.pendientes');
+    Route::prefix('cfdis')->group(function () {
+        Route::post('/timbrar', [CfdiController::class, 'timbrar'])->name('cfdis.timbrar');
+        Route::get('/{id}/xml', [CfdiController::class, 'descargarXml']);
+        Route::post('/{id}/reintentar', [CfdiController::class, 'reintentar']);
+        Route::get('/{id}/pdf', [CfdiController::class, 'descargarPdf']);
+        Route::post('/{id}/generar-pdf', [CfdiController::class, 'generarPdf']);
+        Route::get('/ventas/pendientes', [CfdiController::class, 'ventasPendientes'])->name('cfdis.ventas.pendientes');
+    });
 
     Route::post('/sucursales/{id}/emisor', [SucursalController::class, 'updateEmisor'])->name('sucursales.emisor.update');
     Route::get('/sucursales/{id}/emisor', [SucursalController::class, 'getEmisor'])->name('sucursales.emisor.get');
@@ -90,30 +94,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar']);
 
-    Route::get('/tax-regimes', function() {
+    Route::get('/tax-regimes', function () {
         return TaxRegime::all();
     });
-    Route::get('/usos-cfdi', function() {
+    Route::get('/usos-cfdi', function () {
         return UsoCfdi::all();
     });
     Route::get('/logs', [AuditController::class, 'index'])->name('logs.index');
 
-    // --- MÓDULO DE TRANSFERENCIAS ENTRE SUCURSALES --
     Route::prefix('transferencias')->group(function () {
-        // Listar envíos que vienen en camino hacia la sucursal
         Route::get('pendientes', [TransferenciaController::class, 'pendientes']);
-
-        // Registrar la salida de mercancía (Envío)
         Route::post('enviar', [TransferenciaController::class, 'store']);
-
-        // Registrar la entrada física de mercancía (Recepción)
         Route::post('recibir/{id}', [TransferenciaController::class, 'recibir']);
-
-        // Historial general de transferencias para el administrador
         Route::get('historial', [TransferenciaController::class, 'index']);
     });
 
-    // --- MÓDULO DE INVENTARIOS Y KARDEX ---
     Route::prefix('inventario')->group(function () {
         Route::get('/', [InventarioController::class, 'index'])->name('inventario.index');
         Route::get('/buscar-filtro', [InventarioController::class, 'buscarProducto'])->name('inventario.buscar');
@@ -131,9 +126,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('historico', [InventarioController::class, 'reporteHistorico'])->name('inventario.historico');
     });
 
-    // Kardex por producto
     Route::get('productos/{id}/kardex', [InventarioController::class, 'getKardex']);
-
 
     Route::prefix('catalogos')->group(function () {
 
@@ -174,13 +167,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/sugerencia-apertura', [PosController::class, 'obtenerSugerenciaApertura'])->name('pos.sugerencia-apertura');
     });
 
+    Route::prefix('reportes')->group(function () {
+        Route::get('/ventas-detalladas', [ReportesController::class, 'ventasDetalladas']);
+        Route::get('/ventas-detalladas/pdf', [ReportesController::class, 'exportarPdf']);
+        Route::get('/stock', [InventarioController::class, 'reporteStock']);
+    });
+
     Route::get('/turnos', [CajaTurnoController::class, 'index'])->name('caja.turnos.index');
     Route::get('/turnos/pdf/{id}', [CajaTurnoController::class, 'downloadPdf'])->name('caja.turnos.downloadpdf');
 
     Route::post('perfil/update-name', [PerfilController::class, 'updateName']);
     Route::post('perfil/update-password', [PerfilController::class, 'updatePassword']);
-
-    Route::get('/reportes/stock', [InventarioController::class, 'reporteStock']);
 
     Route::get('sucursales/{id}/ticket-config', [TicketController::class, 'show']);
     Route::post('sucursales/{id}/ticket-config', [TicketController::class, 'store']);
@@ -188,7 +185,6 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::get('/config', [ConfiguracionController::class, 'index']);
-
 Route::get('/test-finkok', function (FinkokService $finkok) {
     return response()->json($finkok->testConnection());
 });

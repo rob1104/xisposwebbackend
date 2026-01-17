@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Cfdi;
+use App\Models\Cliente;
+use App\Models\Setting;
+use App\Models\Sucursal;
 use App\Models\Venta;
 use App\Services\FinkokService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Luecano\NumeroALetras\NumeroALetras;
 
 class CfdiController extends Controller
 {
@@ -22,7 +26,7 @@ class CfdiController extends Controller
 
     public function index(Request $request)
     {
-        $query = Cfdi::query()->with('sucursal');
+        $query = Cfdi::query()->with(['sucursal', 'cliente']);
 
         // Filtrado por sucursal seleccionada
         if ($request->has('sucursal_id')) {
@@ -41,6 +45,7 @@ class CfdiController extends Controller
                 'total' => (float) $f->total,
                 'uuid' => $f->uuid,
                 'status' => $f->status,
+                'cliente' => $f->cliente
             ];
         });
         return response()->json($facturas);
@@ -172,10 +177,9 @@ class CfdiController extends Controller
                 'rfc'      => $cfdi->cliente->rfc,
                 'nombre'   => $cfdi->cliente->razon_social,
                 'cp'       => $cfdi->cliente->codigo_postal,
-                'regimen'  => $cfdi->cliente->regimen_fiscal,
+                'regimen'  => $cfdi->cliente->tax_regime_id,
                 'uso_cfdi' => $cfdi->uso_cfdi
             ];
-
             // 5. Llamamos al servicio de Finkok con los datos corregidos
             $finkok = new FinkokService();
             $resultado = $finkok->crearYTimbrar($cfdi, $receptor);
@@ -236,19 +240,38 @@ class CfdiController extends Controller
             $impuestosFactura += $impuestoLinea;
         }
 
+        if ($request->actualizar_catalogo && $request->receptor['cliente_id']) {
+            $cliente = Cliente::find($request->receptor['cliente_id']);
+            if ($cliente) {
+                $cliente->update([
+                    'rfc'           => $request->receptor['rfc'],
+                    'razon_social'  => mb_strtoupper($request->receptor['nombre']),
+                    'codigo_postal' => $request->receptor['cp'],
+                    'tax_regime_id' => $request->receptor['regimen']
+                ]);
+            }
+        }
+
+        $sucursal = Sucursal::findOrFail($request->sucursal_id);
+        $serie = "F" . ($sucursal->prefijo ?? 'GEN');
+        $ultimoFolio = Cfdi::where('serie', $serie)
+            ->where('sucursale_id', $request->sucursal_id)
+            ->max('folio');
+        $nuevoFolio = ($ultimoFolio ?? 0) + 1;
+
         // 2. SEGUNDO PASO: Crear el encabezado con los totales ya calculados
         $cfdi = Cfdi::create([
             'sucursale_id' => $venta->sucursale_id,
             'user_id'      => auth()->id(),
             'venta_id'     => $venta->id,
-            'cliente_id'   => $venta->cliente_id,
+            'cliente_id'   => $request->receptor['cliente_id'],
             'status'       => 'Pendiente',
-            'serie'        => 'F',
-            'folio'        => $venta->id,
+            'serie'        => $serie,
+            'folio'        => $nuevoFolio,
             'subtotal'     => $subtotalFactura,  // Ya no será null
             'impuestos'    => $impuestosFactura,
             'total'        => $subtotalFactura + $impuestosFactura,
-            'forma_pago'   => $venta->metodo_pago ?? '01',
+            'forma_pago'   => $request->receptor['forma_pago'],
             'metodo_pago'  => 'PUE',
             'uso_cfdi'     => $request->receptor['uso_cfdi'],
             'exportacion'  => '01',
@@ -282,12 +305,204 @@ class CfdiController extends Controller
 
     }
 
+    // App\Http\Controllers\Api\FacturaController.php
+
+    public function destroy($id)
+    {
+        $cfdi = Cfdi::findOrFail($id);
+
+        // SEGURIDAD: Si ya tiene UUID, no se puede borrar, se debe cancelar
+        if ($cfdi->uuid || $cfdi->status === 'Vigente') {
+            return response()->json([
+                'message' => 'No se puede eliminar un CFDI timbrado. Debe utilizar la opción de Cancelar.'
+            ], 422);
+        }
+
+        // 1. Borrar el archivo físico (borrador) si existe
+        if ($cfdi->xml_path && \Storage::disk('private')->exists($cfdi->xml_path)) {
+            \Storage::disk('private')->delete($cfdi->xml_path);
+        }
+
+        // 2. Eliminar de la base de datos (los detalles se borran por cascada o manualmente)
+        $cfdi->detalles()->delete();
+        $cfdi->delete();
+
+        return response()->json(['message' => 'Borrador eliminado correctamente']);
+    }
+
     public function generarPdf($id)
     {
-        $cfdi = Cfdi::with(['detalles.producto', 'sucursal.emisor', 'cliente'])->findOrFail($id);
+        $cfdi = Cfdi::with('sucursal.emisor')->findOrFail($id);
 
+        $logoBase64 = null;
+        $setts = Setting::where('clave', 'logo_url')->first();
+        $pathLogo = $setts->valor;
+
+        if ($pathLogo) {
+            // 1. Convertimos la URL en una ruta de carpeta real
+            // Reemplazamos la URL base por la ruta física del servidor
+            // 'http://localhost:8000/' se convierte en la ruta de tu carpeta 'public/'
+            $relativePart = str_replace(url('/'), '', $pathLogo);
+            $fullSystemPath = public_path($relativePart);
+
+            // 2. Verificamos si el archivo existe físicamente en el servidor
+            if (file_exists($fullSystemPath)) {
+                $logoData = file_get_contents($fullSystemPath);
+                $type = pathinfo($fullSystemPath, PATHINFO_EXTENSION);
+
+                // 3. Generamos el Base64
+                $logoBase64 = 'data:image/' . $type . ';base64,' . base64_encode($logoData);
+            }
+        }
+
+        $catRegimen = [
+            '601' => 'General de Ley Personas Morales',
+            '603' => 'Personas Morales con Fines no Lucrativos',
+            '605' => 'Sueldos y Salarios e Ingresos Asimilados a Salarios',
+            '606' => 'Arrendamiento',
+            '607' => 'Régimen de Enajenación o Adquisición de Bienes',
+            '608' => 'Demás ingresos',
+            '610' => 'Residentes en el Extranjero sin Establecimiento Permanente en México',
+            '611' => 'Ingresos por Dividendos (socios y accionistas)',
+            '612' => 'Personas Físicas con Actividades Empresariales y Profesionales',
+            '614' => 'Ingresos por intereses',
+            '615' => 'Régimen de los ingresos por obtención de premios',
+            '616' => 'Sin obligaciones fiscales',
+            '620' => 'Sociedades Cooperativas de Producción que optan por diferir sus ingresos',
+            '621' => 'Incorporación Fiscal',
+            '622' => 'Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras',
+            '623' => 'Opcional para Grupos de Sociedades',
+            '624' => 'Coordinados',
+            '625' => 'Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas',
+            '626' => 'Régimen Simplificado de Confianza'
+        ];
+
+
+        $catUso = [
+            'G01' => 'Adquisición de mercancías',
+            'G02' => 'Devoluciones, descuentos o bonificaciones',
+            'G03' => 'Gastos en general',
+
+            'I01' => 'Construcciones',
+            'I02' => 'Mobiliario y equipo de oficina por inversiones',
+            'I03' => 'Equipo de transporte',
+            'I04' => 'Equipo de cómputo y accesorios',
+            'I05' => 'Dados, troqueles, moldes, matrices y herramental',
+            'I06' => 'Comunicaciones telefónicas',
+            'I07' => 'Comunicaciones satelitales',
+            'I08' => 'Otra maquinaria y equipo',
+
+            'D01' => 'Honorarios médicos, dentales y gastos hospitalarios',
+            'D02' => 'Gastos médicos por incapacidad o discapacidad',
+            'D03' => 'Gastos funerales',
+            'D04' => 'Donativos',
+            'D05' => 'Intereses reales efectivamente pagados por créditos hipotecarios',
+            'D06' => 'Aportaciones voluntarias al SAR',
+            'D07' => 'Primas por seguros de gastos médicos',
+            'D08' => 'Gastos de transportación escolar obligatoria',
+            'D09' => 'Depósitos en cuentas para el ahorro, primas que tengan como base planes de pensiones',
+            'D10' => 'Pagos por servicios educativos (colegiaturas)',
+
+            'S01' => 'Sin efectos fiscales',
+            'CP01' => 'Pagos'
+        ];
+
+        $catForma = [
+            '01' => 'Efectivo',
+            '02' => 'Cheque nominativo',
+            '03' => 'Transferencia electrónica de fondos',
+            '04' => 'Tarjeta de crédito',
+            '28' => 'Tarjeta de débito',
+            '99' => 'Por definir'
+        ];
+
+        $catForma = [
+            '01' => 'Efectivo',
+            '02' => 'Cheque nominativo',
+            '03' => 'Transferencia electrónica de fondos',
+            '04' => 'Tarjeta de crédito',
+            '05' => 'Monedero electrónico',
+            '06' => 'Dinero electrónico',
+            '08' => 'Vales de despensa',
+            '12' => 'Dación en pago',
+            '13' => 'Pago por subrogación',
+            '14' => 'Pago por consignación',
+            '15' => 'Condonación',
+            '17' => 'Compensación',
+            '23' => 'Novación',
+            '24' => 'Confusión',
+            '25' => 'Remisión de deuda',
+            '26' => 'Prescripción o caducidad',
+            '27' => 'A satisfacción del acreedor',
+            '28' => 'Tarjeta de débito',
+            '29' => 'Tarjeta de servicios',
+            '30' => 'Aplicación de anticipos',
+            '31' => 'Intermediario pagos',
+            '99' => 'Por definir'
+        ];
+
+
+
+
+        // 1. Cargar XML y registrar Namespaces
+        $xmlContent = \Storage::disk('private')->get($cfdi->xml_path);
+        $xml = new \SimpleXMLElement($xmlContent);
+        $xml->registerXPathNamespace('cfdi', 'http://www.sat.gob.mx/cfd/4');
+        $xml->registerXPathNamespace('tfd', 'http://www.sat.gob.mx/TimbreFiscalDigital');
+
+        // Procesamos las descripciones (Código - Descripción)
+        $regimenCodigo = (string)$xml->xpath('//cfdi:Receptor')[0]['RegimenFiscalReceptor'];
+        $usoCodigo = (string)$xml->xpath('//cfdi:Receptor')[0]['UsoCFDI'];
+        $formaCodigo = (string)$xml['FormaPago'];
+
+        // 2. Extraer Nodos Principales
+        $receptor = $xml->xpath('//cfdi:Receptor')[0];
+        $timbre = $xml->xpath('//tfd:TimbreFiscalDigital')[0];
+
+        // 3. Preparar Datos Fiscales (Lo que falta en tu imagen)
+        $fiscal = [
+            'uuid'              => (string)$timbre['UUID'],
+            'sello_sat'         => (string)$timbre['SelloSAT'],
+            'sello_cfd'         => (string)$timbre['SelloCFD'],
+            'no_certificado_sat'=> (string)$timbre['NoCertificadoSAT'],
+            'fecha_timbrado'    => (string)$timbre['FechaTimbrado'],
+            'rfc_prov_certif'   => (string)$timbre['RfcProvCertif'],
+            'receptor_cp'       => (string)$receptor['DomicilioFiscalReceptor'],
+            'receptor_regimen'  => (string)$receptor['RegimenFiscalReceptor'],
+            'receptor_uso'      => (string)$receptor['UsoCFDI'],
+            'metodo_pago'       => (string)$xml['MetodoPago'],
+            'forma_pago'        => (string)$xml['FormaPago'],
+            'receptor_regimen_txt' => $regimenCodigo . ' - ' . ($catRegimen[$regimenCodigo] ?? 'Régimen no definido'),
+            'receptor_uso_txt'    => $usoCodigo . ' - ' . ($catUso[$usoCodigo] ?? 'Uso no definido'),
+            'forma_pago_txt'   => $formaCodigo . ' - ' . ($catForma[$formaCodigo] ?? 'Forma de pago no definida'),
+        ];
+
+        // 4. Cadena Original del Complemento de Certificación Digital del SAT
+        $cadenaOriginal = "||1.1|{$fiscal['uuid']}|{$fiscal['fecha_timbrado']}|{$fiscal['rfc_prov_certif']}|{$fiscal['sello_cfd']}|{$fiscal['no_certificado_sat']}||";
+
+        // 5. Total con Letra
+
+        $total = (float)$xml['Total']; // Obtenemos el total del XML [cite: 21]
+        $entero = floor($total); // Parte entera (Pesos)
+        $centavos = round(($total - $entero) * 100); // Parte decimal (Centavos)
+
+        $formatter = new NumeroALetras();
+
+        // 1. Convertimos solo la parte entera a letras
+        $textoEntero = $formatter->toWords($entero);
+
+        // 2. Construimos la cadena manualmente con el formato exacto de Walmart
+        // str_pad asegura que siempre sean 2 dígitos (ej: 0 -> 00)
+        $totalLetra = "(" . mb_strtoupper($textoEntero) . " PESOS " . str_pad($centavos, 2, '0', STR_PAD_LEFT) . "/100 M.N.)";
+        $impuestosGlobales = $xml->xpath('/cfdi:Comprobante/cfdi:Impuestos/cfdi:Traslados/cfdi:Traslado');
+
+        // 6. URL para QR (Basado en el estándar del SAT)
+        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=" . urlencode(
+                "https://verificacfdi.facturaelectronica.sat.gob.mx/default.aspx?" .
+                "id={$fiscal['uuid']}&re={$xml->xpath('//cfdi:Emisor')[0]['Rfc']}&rr={$receptor['Rfc']}&tt={$xml['Total']}&fe=" . substr($fiscal['sello_cfd'], -8)
+            );
         // 1. Generar el PDF a partir de la vista Blade
-        $pdf = Pdf::loadView('pdf.factura', compact('cfdi'));
+        $pdf = Pdf::loadView('pdf.factura', compact('cfdi', 'xml', 'qrUrl', 'totalLetra', 'cadenaOriginal', 'fiscal', 'impuestosGlobales', 'logoBase64'));
 
         // 2. Definir ruta y guardar en disco privado
         $nombreArchivo = 'pdfs/factura_' . $cfdi->folio . '_' . time() . '.pdf';

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Cfdi;
+use App\Models\TaxRegime;
 use CfdiUtils\CfdiCreator40;
 use CfdiUtils\Certificado\Certificado;
 use CfdiUtils\PemPrivateKey\PemPrivateKey;
@@ -78,12 +79,14 @@ class FinkokService
                 'RegimenFiscal' => $emisor->regimen_fiscal,
             ]);
 
+            $regimen = TaxRegime::find($datosReceptor['regimen']);
+
             // 3. Datos del Receptor (Datos fijos para la prueba)
             $comprobante->addReceptor([
                 'Rfc'                     => strtoupper($datosReceptor['rfc']),
                 'Nombre'                  => mb_strtoupper($datosReceptor['nombre']),
                 'DomicilioFiscalReceptor' => $datosReceptor['cp'],
-                'RegimenFiscalReceptor'   => $datosReceptor['regimen'],
+                'RegimenFiscalReceptor'   => $regimen->code,
                 'UsoCFDI'                 => $datosReceptor['uso_cfdi'],
             ]);
             $impuestosAgrupados = [];

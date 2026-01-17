@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Producto;
 use App\Models\Setting;
+use App\Models\Sucursal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -70,5 +72,46 @@ class ConfiguracionController extends Controller
                 'message' => 'Configuración visual actualizada correctamente'
             ]);
         });
+    }
+
+    public function sincronizarInventariosCero()
+    {
+        try {
+            $sucursales = Sucursal::pluck('id');
+            $productos = Producto::pluck('id');
+            $insertados = 0;
+
+            foreach ($sucursales as $sucursalId) {
+                foreach ($productos as $productoId) {
+                    // Verificamos si ya existe el registro en la tabla de inventarios
+                    $existe = \DB::table('sucursal_productos')
+                        ->where('sucursal_id', $sucursalId)
+                        ->where('producto_id', $productoId)
+                        ->exists();
+
+                    if (!$existe) {
+                        \DB::table('sucursal_productos')->insert([
+                            'sucursal_id'    => $sucursalId,
+                            'producto_id'    => $productoId,
+                            'cantidad'       => 0.000000,
+                            'stock_actual'   => 0.000000,
+                            'stock_minimo'   => 0.000000,
+                            'stock_maximo'   => 0.000000,
+                            'costo_promedio' => 0.000000,
+                            'created_at'     => now(),
+                            'updated_at'     => now(),
+                        ]);
+                        $insertados++;
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Sincronización completada. Se crearon $insertados registros de inventario."
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 }

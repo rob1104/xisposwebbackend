@@ -22,7 +22,7 @@ class ClientesController extends Controller implements HasMiddleware
     }
     public function index()
     {
-        return response()->json(Cliente::orderBy('razon_social')->get());
+        return response()->json(Cliente::orderBy('razon_social')->with('taxRegime')->get());
     }
 
     public function store(ClienteRequest $request)
