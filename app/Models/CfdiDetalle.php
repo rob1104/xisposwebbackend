@@ -21,9 +21,12 @@ class CfdiDetalle extends Model
         'impuesto_base',
         'impuesto_importe',
         'impuesto_tasa_cuota',
+        'producto_id',
     ];
 
     public function cfdi() { return $this->belongsTo(Cfdi::class) ;}
+
+    public function producto() { return $this->belongsTo(Producto::class); }
 
     public function getActivitylogOptions(): LogOptions
     {

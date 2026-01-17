@@ -19,7 +19,20 @@ class Cfdi extends Model
         'subtotal',
         'total',
         'impuestos',
+        'sucursale_id',
+        'cliente_id',
+        'user_id',
+        'venta_id',
+        'uuid',
+        'status',
+        'exportacion',
+        'xml_path',
+        'pdf_path',
     ];
+
+    public function cliente() { return $this->belongsTo(Cliente::class); }
+
+    public function sucursal() { return $this->belongsTo(Sucursal::class, 'sucursale_id', 'id'); }
 
     public function detalles() { return $this->hasMany(CfdiDetalle::class) ;}
 

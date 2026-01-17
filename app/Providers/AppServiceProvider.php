@@ -38,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
                 {
                     // En Laravel 11, algunas gramáticas requieren la conexión en el constructor
                     // Si tu versión no la pide, esto no romperá nada.
+                    parent::__construct($connection);
                 }
 
                 public function compileColumns($schema, $table)

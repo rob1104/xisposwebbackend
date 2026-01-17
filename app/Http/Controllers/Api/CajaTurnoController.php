@@ -19,7 +19,7 @@ class CajaTurnoController extends Controller
 
         // Si se envía un sucursal_id (caso del admin/gerente), filtramos por sucursal.
         if ($request->has('sucursal_id')) {
-            $query->where('sucursal_id', $request->sucursal_id);
+            $query->where('sucursale_id', $request->sucursal_id);
         }
 
         return $query->orderBy('id', 'desc')->get();

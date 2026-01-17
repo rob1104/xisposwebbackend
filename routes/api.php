@@ -21,6 +21,7 @@ use App\Http\Controllers\ConfiguracionController;
 use App\Http\Controllers\PerfilController;
 use App\Http\Controllers\TicketController;
 use App\Models\TaxRegime;
+use App\Models\UsoCfdi;
 use App\Services\FinkokService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -63,6 +64,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('ventas', VentaController::class);
     Route::apiResource('cfdis', CfdiController::class);
 
+    Route::post('/cfdis/timbrar', [CfdiController::class, 'timbrar'])->name('cfdis.timbrar');
+    Route::get('/cfdis/{id}/xml', [CfdiController::class, 'descargarXml']);
+    Route::post('/cfdis/{id}/reintentar', [CfdiController::class, 'reintentar']);
+    Route::get('/cfdis/{id}/pdf', [CfdiController::class, 'descargarPdf']);
+    Route::post('/cfdis/{id}/generar-pdf', [CfdiController::class, 'generarPdf']);
+
+    Route::get('/cfdis/ventas/pendientes', [CfdiController::class, 'ventasPendientes'])->name('cfdis.ventas.pendientes');
+
     Route::post('/sucursales/{id}/emisor', [SucursalController::class, 'updateEmisor'])->name('sucursales.emisor.update');
     Route::get('/sucursales/{id}/emisor', [SucursalController::class, 'getEmisor'])->name('sucursales.emisor.get');
 
@@ -83,6 +92,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/tax-regimes', function() {
         return TaxRegime::all();
+    });
+    Route::get('/usos-cfdi', function() {
+        return UsoCfdi::all();
     });
     Route::get('/logs', [AuditController::class, 'index'])->name('logs.index');
 

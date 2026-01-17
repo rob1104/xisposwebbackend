@@ -27,7 +27,8 @@ class Venta extends Model
         'referencia_pago',
         'tarjeta_ultimos_4',
         'efectivo_recibido',
-        'cambio_entregado'
+        'cambio_entregado',
+        'cfdi_id'
     ];
 
     public function detalles()
@@ -38,6 +39,11 @@ class Venta extends Model
     public function pagos()
     {
         return $this->hasMany(VentaPago::class);
+    }
+
+    public function cfdi()
+    {
+        return $this->hasOne(Cfdi::class, 'venta_id', 'id')->withDefault(['folio' => 'Sin CFDI']);
     }
 
     public function cliente()

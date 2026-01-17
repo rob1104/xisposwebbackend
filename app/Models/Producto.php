@@ -33,7 +33,7 @@ class Producto extends Model
 
     public function impuestos()
     {
-        return $this->belongsToMany(Impuesto::class, 'producto_impuestos');
+        return $this->belongsToMany(Impuesto::class, 'producto_impuestos', 'producto_id', 'impuesto_id');
     }
 
     public function umedida()

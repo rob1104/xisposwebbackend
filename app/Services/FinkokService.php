@@ -23,10 +23,14 @@ class FinkokService
         $this->url = config('services.finkok.url_stamp');
     }
 
-    public function crearYTimbrar(Cfdi $cfdi)
+    public function crearYTimbrar(Cfdi $cfdi, array $datosReceptor)
     {
         try {
-            // RECUPERAR EMISOR COMO ANTES
+
+            if (!$cfdi->sucursal || !$cfdi->sucursal->emisor) {
+                throw new Exception("La sucursal ID {$cfdi->sucursale_id} no tiene un Emisor configurado.");
+            }
+
             $emisor = $cfdi->sucursal->emisor;
 
             // Cargar archivos CSD desde storage private
@@ -40,6 +44,8 @@ class FinkokService
             $certificado = new Certificado($cerPath);
             $keyBinary = Storage::disk('private')->get($emisor->key_path);
             $keyPem = $this->convertirKeyAPem($keyBinary, $emisor->password_csd);
+
+
 
             // 1. Configurar Comprobante (Anexo 20)
             $creator = new CfdiCreator40([
@@ -74,12 +80,13 @@ class FinkokService
 
             // 3. Datos del Receptor (Datos fijos para la prueba)
             $comprobante->addReceptor([
-                'Rfc' => 'EAMR870411S57',
-                'Nombre' => 'ROBERTO EZEQUIEL ESCAMILLA MARTINEZ',
-                'DomicilioFiscalReceptor' => '87370',
-                'RegimenFiscalReceptor' => '626',
-                'UsoCFDI' => 'G03',
+                'Rfc'                     => strtoupper($datosReceptor['rfc']),
+                'Nombre'                  => mb_strtoupper($datosReceptor['nombre']),
+                'DomicilioFiscalReceptor' => $datosReceptor['cp'],
+                'RegimenFiscalReceptor'   => $datosReceptor['regimen'],
+                'UsoCFDI'                 => $datosReceptor['uso_cfdi'],
             ]);
+            $impuestosAgrupados = [];
 
             // 4. Conceptos e Impuestos
             foreach ($cfdi->detalles as $det) {
@@ -90,39 +97,72 @@ class FinkokService
                     'Descripcion' => mb_strtoupper($det->descripcion),
                     'ValorUnitario' => number_format($det->valor_unitario, 6, '.', ''),
                     'Importe' => number_format($det->importe, 2, '.', ''),
-                    'ObjetoImp' => '02',
+                    'ObjetoImp' => $det->objeto_imp,
                 ]);
 
                 $concepto->addTraslado([
-                    'Base' => number_format($det->importe, 2, '.', ''),
+                    'Base' => number_format($det->impuesto_base, 2, '.', ''),
                     'Impuesto' => '002',
                     'TipoFactor' => 'Tasa',
-                    'TasaOCuota' => '0.160000',
+                    'TasaOCuota' => number_format($det->impuesto_tasa_cuota, 6, '.', ''),
                     'Importe' => number_format($det->impuesto_importe, 2, '.', ''),
+                ]);
+
+                $tasa = $det->impuesto_tasa_cuota;
+                if (!isset($impuestosAgrupados[$tasa])) {
+                    $impuestosAgrupados[$tasa] = ['base' => 0, 'importe' => 0];
+                }
+                $impuestosAgrupados[$tasa]['base'] += $det->impuesto_base;
+                $impuestosAgrupados[$tasa]['importe'] += $det->impuesto_importe;
+            }
+
+            $impuestosGlobales = $comprobante->addImpuestos([
+                'TotalImpuestosTrasladados' => number_format($cfdi->impuestos, 2, '.', ''),
+            ]);
+            foreach ($impuestosAgrupados as $tasa => $valores) {
+                $impuestosGlobales->addTraslado([
+                    'Base'       => number_format($valores['base'], 2, '.', ''),
+                    'Impuesto'   => '002',
+                    'TipoFactor' => 'Tasa',
+                    'TasaOCuota' => $tasa,
+                    'Importe'    => number_format($valores['importe'], 2, '.', ''),
                 ]);
             }
 
-            // Impuestos Globales
-            $comprobante->addImpuestos([
-                'TotalImpuestosTrasladados' => number_format($cfdi->impuestos, 2, '.', ''),
-            ])->addTraslado([
-                'Base' => number_format($cfdi->subtotal, 2, '.', ''),
-                'Impuesto' => '002',
-                'TipoFactor' => 'Tasa',
-                'TasaOCuota' => '0.160000',
-                'Importe' => number_format($cfdi->impuestos, 2, '.', ''),
-            ]);
+
 
             // 5. Sellado con la llave privada y el CSD
             $creator->addSello($keyPem, $emisor->password_csd);
 
+            $xmlGenerado = $creator->asXml();
+            // NUEVO: Guardar XML Borrador antes de enviar
+            $fileName = 'cfdis/borrador_' . $cfdi->id . '_' . time() . '.xml';
+            Storage::disk('private')->put($fileName, $xmlGenerado);
+
             // 6. Enviar a Finkok
-            return $this->enviarPeticionFinkok($creator->asXml());
+            $respuesta = $this->enviarPeticionFinkok($creator->asXml());
+            if ($respuesta['success']) {
+                // Si tiene éxito, sobreescribimos el archivo con el XML que ya trae el timbre
+                Storage::disk('private')->put($fileName, $respuesta['xml']);
+
+
+                return [
+                    'success'  => true,
+                    'uuid'     => $respuesta['uuid'],
+                    'xml_path' => $fileName
+                ];
+            }
 
         } catch (Exception $e) {
-            return ['success' => false, 'message' => $e->getMessage()];
+
+            return [
+                'success'  => false,
+                'message'  => $e->getMessage(),
+                'xml_path' => $fileName ?? null
+            ];
         }
     }
+
 
     private function enviarPeticionFinkok(string $xmlContent)
     {
@@ -137,40 +177,37 @@ class FinkokService
 
         try {
             $response = $client->stamp($params);
-
             $result = $response->stampResult;
+            $uuid = $result->UUID ?? $result->uuid ?? null;
 
-// 2. Si existe un UUID, el timbrado fue exitoso (Ignoramos incidencias informativas)
-            if (!empty($result->uuid)) {
+            if (!empty($uuid)) {
                 return [
                     'success' => true,
-                    'uuid'    => $result->uuid,
+                    'uuid'    => $uuid,
                     'xml'     => $result->xml
                 ];
             }
 
-// 3. Si no hay UUID, buscamos el error en Incidencias de forma segura
+            // Si no hay UUID, extraemos el error detallado del PAC
             if (isset($result->Incidencias->Incidencia)) {
                 $incidencias = $result->Incidencias->Incidencia;
 
-                // Finkok puede devolver un solo objeto o un array de objetos
-                if (is_array($incidencias)) {
-                    $errorPrincipal = $incidencias[0];
-                } else {
-                    $errorPrincipal = $incidencias;
+                // Finkok puede enviar una incidencia o un arreglo de ellas
+                $listaErrores = is_array($incidencias) ? $incidencias : [$incidencias];
+
+                $mensajes = [];
+                foreach ($listaErrores as $error) {
+                    // Limpiamos el mensaje de caracteres extraños para que sea legible
+                    $mensajeLimpio = str_replace(['<![CDATA[', ']]>'], '', $error->MensajeIncidencia);
+                    $mensajes[] = "[{$error->CodigoError}]: {$mensajeLimpio}";
                 }
 
-                $mensaje = $errorPrincipal->Mensaje ?? 'Error desconocido';
-                $codigo = $errorPrincipal->CodigoError ?? 'N/A';
-
-                throw new Exception("Error del SAT [{$codigo}]: {$mensaje}");
+                // Unimos todos los errores encontrados en un solo string
+                throw new Exception(implode(" | ", $mensajes));
             }
 
-            return [
-                'success' => true,
-                'uuid' => $response->stampResult->UUID,
-                'xml' => $response->stampResult->xml
-            ];
+            throw new Exception("El PAC no devolvió un UUID ni una incidencia clara: " );
+
         } catch (Exception $e) {
             throw $e;
         }
@@ -206,4 +243,6 @@ class FinkokService
         openssl_pkey_export($keyResource, $pem);
         return $pem;
     }
+
+
 }
