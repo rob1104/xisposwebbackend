@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>Factura Electrónica {{ $xml['Serie'] }}{{ $xml['Folio'] }}</title>
     <style>
-        /* --- CORRECCIÓN PRINCIPAL: REGLA GLOBAL DE CAJA --- */
         /* Esto asegura que el padding no empuje los elementos fuera del margen */
         * {
             box-sizing: border-box;
@@ -35,7 +34,6 @@
         .table-concepts th { padding: 8px; font-size: 8px; text-transform: uppercase; }
         .table-concepts td { padding: 7px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
 
-        /* --- CORRECCIÓN EN DATOS TÉCNICOS --- */
         .seal-container {
             width: 100%; /* Forzar a que no exceda el ancho */
             border: 1px solid #e2e8f0;
@@ -52,7 +50,7 @@
             color: #64748b;
             line-height: 1.1;
             width: 100%; /* Asegurar ancho máximo */
-            /* REFUERZO PARA ROMPER CADENAS LARGAS EN DOMPDF */
+
             word-break: break-all;
             word-wrap: break-word;
             white-space: normal;

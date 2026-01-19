@@ -41,6 +41,6 @@ class Cfdi extends Model
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
-            ->useLogName('cfdis'); // Categoría del log
+            ->useLogName('cfdis');
     }
 }

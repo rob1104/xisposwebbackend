@@ -112,4 +112,9 @@ class ClientesController extends Controller implements HasMiddleware
             'detalles' => $ventas->values()
         ]);
     }
+
+    public function buscarPorNumeroGlobal($numero)
+    {
+        return Cliente::where('numero_global', $numero)->first();
+    }
 }

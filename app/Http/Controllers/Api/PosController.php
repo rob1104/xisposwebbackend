@@ -154,7 +154,8 @@ class PosController extends Controller
             'nombre' => $producto->nombre,
             'codigo_barras' => $producto->codigo_barras,
             'precio' => $precioPublico ? $precioPublico->precio : 0, // Campo usado en el frontend
-            'impuestos' => $producto->impuestos
+            'impuestos' => $producto->impuestos,
+            'status' => $producto->status
         ]);
     }
 

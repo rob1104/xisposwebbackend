@@ -28,15 +28,17 @@ class InventarioController extends Controller
 
     public function buscarProducto(Request $request)
     {
-        $query = $request->input('q'); // Término de búsqueda (nombre o código)
+        $query = $request->input('q');
 
         if (!$query) return response()->json([]);
 
-        // Buscamos productos que coincidan por nombre o SKU
-        $productos = Producto::where('nombre', 'LIKE', "%{$query}%")
-            ->orWhere('codigo_barras', 'LIKE', "%{$query}%")
+        $productos = Producto::where('status', true)
+        ->where(function($q) use ($query) {
+            $q->where('nombre', 'LIKE', "%{$query}%")
+                ->orWhere('codigo_barras', 'LIKE', "%{$query}%");
+        })
             ->with('categoria')
-            ->limit(10) // Limitamos para mejorar el rendimiento
+            ->limit(15)
             ->get();
 
         return response()->json($productos);

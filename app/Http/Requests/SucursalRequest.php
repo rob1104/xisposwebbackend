@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SucursalRequest extends FormRequest
 {
@@ -21,11 +22,13 @@ class SucursalRequest extends FormRequest
      */
     public function rules(): array
     {
+        $sucursalId = $this->route('sucursale') ? $this->route('sucursale')->id : null;
         return [
             'nombre' => 'required|string|max:255',
             'direccion' => 'nullable|string',
             'telefono' => 'nullable|string',
-            'prefijo' => 'required|string|max:5'
+            'prefijo' => ['required', 'string', 'max:5', Rule::unique('sucursales')->ignore($sucursalId)],
+            'bascula' => 'nullable|string|max:5'
         ];
     }
 }

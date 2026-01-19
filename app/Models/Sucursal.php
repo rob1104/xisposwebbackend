@@ -12,10 +12,12 @@ class Sucursal extends Model
     protected $table = 'sucursales';
 
     protected $fillable = [
-        'nombre', 'direccion', 'telefono',
+        'nombre',
+        'direccion',
+        'telefono',
         'sucursale_id',
         'codigo_postal',
-        'prefijo'
+        'prefijo', 'bascula'
     ];
     public function users()
     {

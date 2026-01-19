@@ -124,7 +124,8 @@ class ProductoController extends Controller
         $query = $request->get('q');
 
         return Producto::where('status', true)
-            ->where('tipo_producto', '!=', 'Compuesto') // <--- Bloqueo preventivo
+            ->where('tipo_producto', '!=', 'Compuesto')
+            ->where('status', '!=', false)
             ->where(function($q) use ($query) {
                 $q->where('nombre', 'LIKE', "%{$query}%")
                     ->orWhere('codigo_barras', 'LIKE', "%{$query}%");

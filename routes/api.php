@@ -83,6 +83,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/caja/movimientos', [CajaMovimientoController::class, 'store'])->name('caja.movimientos.store');
 
+    Route::get('/clientes/{numero}/global', [ClientesController::class, 'buscarPorNumeroGlobal'])->name('clientes.global');
+
     Route::get('clientes/{îd}/antiguedad', [ClientesController::class, 'getAntiguedadSaldos'])->name('clientes.antiguedad');
     Route::get('proveedores/{îd}/antiguedad', [ProveedorController::class, 'getAntiguedadSaldos'])->name('proveedores.antiguedad');
 
@@ -151,9 +153,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('pos')->group(function () {
-        Route::get('/verificar-turno', [PosController::class, 'verificarTurno']); //
-        Route::post('/abrir-turno', [PosController::class, 'abrirTurno']); //
-        // Para el escáner (búsqueda exacta por código de barras)
+        Route::get('/verificar-turno', [PosController::class, 'verificarTurno']);
+        Route::post('/abrir-turno', [PosController::class, 'abrirTurno']);
+
+        /// Para el escáner (búsqueda exacta por código de barras)
         Route::get('/producto/{barcode}', [PosController::class, 'getByBarcode']);
 
         // Para el diálogo de búsqueda (filtro por nombre o código parcial)
@@ -185,6 +188,3 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::get('/config', [ConfiguracionController::class, 'index']);
-Route::get('/test-finkok', function (FinkokService $finkok) {
-    return response()->json($finkok->testConnection());
-});
