@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuditController;
+use App\Http\Controllers\Api\AuditoriaInventarioController;
 use App\Http\Controllers\Api\CajaMovimientoController;
 use App\Http\Controllers\Api\CajaTurnoController;
 use App\Http\Controllers\Api\CatalogoController;
@@ -66,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('compras', CompraController::class);
     Route::apiResource('ventas', VentaController::class);
     Route::apiResource('cfdis', CfdiController::class);
+    Route::apiResource('auditoriainventario', AuditoriaInventarioController::class);
 
     Route::prefix('cfdis')->group(function () {
         Route::post('/timbrar', [CfdiController::class, 'timbrar'])->name('cfdis.timbrar');
@@ -78,6 +80,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/sucursales/{id}/emisor', [SucursalController::class, 'updateEmisor'])->name('sucursales.emisor.update');
     Route::get('/sucursales/{id}/emisor', [SucursalController::class, 'getEmisor'])->name('sucursales.emisor.get');
+
+
+    Route::get('/auditoria/productos-sucursal/{sucursal_id}', [AuditoriaInventarioController::class, 'obtenerProductosParaConteo']);
+    Route::post('/auditoria/procesar', [AuditoriaInventarioController::class, 'procesarConteo']);
+    Route::get('/auditoria/reporte/pdf/{id}', [AuditoriaInventarioController::class, 'generaPDF']);
 
     Route::get('/compras/{id}/pdf', [CompraController::class, 'descargarPDF'])->name('compras.pdf');
 
@@ -172,7 +179,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('reportes')->group(function () {
         Route::get('/ventas-detalladas', [ReportesController::class, 'ventasDetalladas']);
-        Route::get('/ventas-detalladas/pdf', [ReportesController::class, 'exportarPdf']);
+        Route::get('/ventas-detalladas/pdf', [ReportesController::class, 'ventasDetalladasexportarPdf']);
         Route::get('/stock', [InventarioController::class, 'reporteStock']);
     });
 

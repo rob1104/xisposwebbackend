@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -71,5 +72,28 @@ class Producto extends Model
             ->logFillable()
             ->logOnlyDirty()
             ->useLogName('productos'); // Categoría del log
+    }
+
+    public function actualizarStockSucursal(mixed $sucursale_id, mixed $stock_fisico)
+    {
+        return DB::table('sucursal_productos')->updateOrInsert(
+            [
+                'producto_id' => $this->id,
+                'sucursal_id' => $sucursale_id
+            ],
+            [
+                'stock_actual' => $stock_fisico,
+                'updated_at'   => now()
+            ]
+        );
+    }
+    
+    public function stockEnSucursal(mixed $sucursal_id)
+    {
+        $inventario = DB::table('sucursal_productos')
+            ->where('producto_id', $this->id)
+            ->where('sucursal_id', $sucursal_id)
+            ->first();
+        return $inventario ? (float) $inventario->stock_actual : 0;
     }
 }
