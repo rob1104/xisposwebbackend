@@ -22,7 +22,7 @@ class AuditoriaInventario extends Model
     public function sucursal() { return $this->belongsTo(Sucursal::class, "sucursale_id", "id"); }
 
     public function user() { return $this->belongsTo(User::class); }
-    
+
 
     public function getActivitylogOptions(): LogOptions
     {

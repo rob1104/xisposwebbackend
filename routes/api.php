@@ -171,6 +171,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/finalizar-venta', [VentaController::class, 'store']);
 
+        Route::get('/print-corte/{id}', [PosController::class, 'datosImpresionCorte']);
+
         Route::get('/balance-turno/{id}', [PosController::class, 'balanceTurno']);
         Route::post('/cerrar-turno', [PosController::class, 'cerrarTurno']);
         Route::get('/ultimo-ticket', [PosController::class, 'getUltimoTicket']);

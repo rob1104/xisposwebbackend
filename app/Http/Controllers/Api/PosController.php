@@ -46,12 +46,9 @@ class PosController extends Controller
     public function balanceTurno($id)
     {
         $turno = CajaTurno::findOrFail($id);
-
-        // Mantenemos tu variable original de saldo inicial
         $fondoApertura = $turno->saldo_inicial;
 
-        // 1. EFECTIVO: Sumamos ventas pagadas en efectivo neto (Monto - Cambio)
-        // Tal cual como lo tenías, filtrando por estado 'Completada'
+        // 1. VENTAS EN EFECTIVO: (Monto pagado - Cambio entregado)
         $ventasEfectivo = DB::table('venta_pagos')
             ->join('ventas', 'venta_pagos.venta_id', '=', 'ventas.id')
             ->where('ventas.caja_turno_id', $id)
@@ -60,8 +57,7 @@ class PosController extends Controller
             ->selectRaw('SUM(monto - IFNULL(cambio_entregado, 0)) as total')
             ->value('total') ?? 0;
 
-        // 2. TARJETA: Sumamos ventas pagadas con tarjeta
-        // Nota: Aquí no restamos cambio ya que en tarjeta el monto es exacto
+        // 2. VENTAS EN TARJETA
         $ventasTarjeta = DB::table('venta_pagos')
             ->join('ventas', 'venta_pagos.venta_id', '=', 'ventas.id')
             ->where('ventas.caja_turno_id', $id)
@@ -69,31 +65,40 @@ class PosController extends Controller
             ->where('venta_pagos.metodo_pago', 'Tarjeta')
             ->sum('monto') ?? 0;
 
-        // 3. MOVIMIENTOS: Entradas y Salidas manuales de efectivo
-        // He mantenido el nombre de la tabla 'caja_momivientos' como estaba en tu código
-        $movimientos = DB::table('caja_momivientos')
-            ->where('caja_turno_id', $turno->id)
+        // 3. MOVIMIENTOS DETALLADOS (Para el desglose en el modal)
+        $movimientosLista = DB::table('caja_momivientos')
+            ->where('caja_turno_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 4. SUMATORIA DE MOVIMIENTOS
+        // Nota: Corregido 'Egreso' por 'Retiro' para coincidir con el ENUM de tu DB
+        $sumas = DB::table('caja_momivientos')
+            ->where('caja_turno_id', $id)
             ->select(DB::raw("
-            SUM(CASE WHEN tipo = 'Ingreso' THEN monto ELSE 0 END) as entradas,
-            SUM(CASE WHEN tipo = 'Egreso' THEN monto ELSE 0 END) as salidas
+            SUM(CASE WHEN tipo = 'Entrada' THEN monto ELSE 0 END) as entradas,
+            SUM(CASE WHEN tipo = 'Retiro' THEN monto ELSE 0 END) as retiros
         "))->first();
 
-        // 4. CÁLCULOS FINALES
-        $efectivoEsperado = $fondoApertura + $ventasEfectivo + ($movimientos->entradas ?? 0) - ($movimientos->salidas ?? 0);
+        // 5. CÁLCULO DE EFECTIVO ESPERADO
+        $totalEntradas = $sumas->entradas ?? 0;
+        $totalRetiros = $sumas->retiros ?? 0;
+
+        // Fórmula: Fondo Inicial + Ventas Efectivo + Entradas - Retiros
+        $efectivoEsperado = ($fondoApertura + $ventasEfectivo + $totalEntradas) - $totalRetiros;
         $totalGeneral = $efectivoEsperado + $ventasTarjeta;
-
-
 
         return response()->json([
             'efectivo_esperado' => round($efectivoEsperado, 2),
             'tarjeta_esperado' => round($ventasTarjeta, 2),
             'total_general' => round($totalGeneral, 2),
+            'ventas_efectivo' => round($ventasEfectivo, 2),
+            'total_entradas' => round($totalEntradas, 2),
+            'total_retiros' => round($totalRetiros, 2),
+            'movimientos' => $movimientosLista, // Enviamos la lista para el desglose
             'detalle' => [
                 'fondo' => $fondoApertura,
-                'ventas_efectivo' => $ventasEfectivo,
                 'ventas_tarjeta' => $ventasTarjeta,
-                'entradas' => $movimientos->entradas ?? 0,
-                'salidas' => $movimientos->salidas ?? 0
             ]
         ]);
     }
@@ -221,4 +226,73 @@ class PosController extends Controller
         ]);
     }
 
+    /**
+     * Corte de caja en formato ticket
+     */
+    public function datosImpresionCorte($id)
+    {
+        $turno = CajaTurno::with(['user', 'sucursal', 'movimientos'])->findOrFail($id);
+
+        // 1. AGRUPAR VENTAS POR PRODUCTO (Resumen de Artículos Vendidos)
+        $productosVendidos = DB::table('venta_detalles')
+            ->join('ventas', 'venta_detalles.venta_id', '=', 'ventas.id')
+            ->join('productos', 'venta_detalles.producto_id', '=', 'productos.id')
+            ->where('ventas.caja_turno_id', $id)
+            ->where('ventas.status', 'Completada')
+            ->select(
+                'productos.nombre',
+                DB::raw('SUM(venta_detalles.cantidad) as cantidad_total'),
+                DB::raw('SUM(venta_detalles.total) as dinero_total')
+            )
+            ->groupBy('productos.id', 'productos.nombre')
+            ->get();
+
+        // 2. TOTALES FINANCIEROS
+        $ventasEfectivo = DB::table('venta_pagos')
+            ->join('ventas', 'venta_pagos.venta_id', '=', 'ventas.id')
+            ->where('ventas.caja_turno_id', $id)
+            ->where('ventas.status', 'Completada')
+            ->where('venta_pagos.metodo_pago', 'Efectivo')
+            ->selectRaw('SUM(monto - IFNULL(cambio_entregado, 0)) as total')
+            ->value('total') ?? 0;
+
+        $ventasTarjeta = DB::table('venta_pagos')
+            ->join('ventas', 'venta_pagos.venta_id', '=', 'ventas.id')
+            ->where('ventas.caja_turno_id', $id)
+            ->where('ventas.status', 'Completada')
+            ->where('venta_pagos.metodo_pago', 'Tarjeta')
+            ->sum('monto') ?? 0;
+
+        // 3. MOVIMIENTOS
+        $entradas = $turno->movimientos->where('tipo', 'Ingreso')->sum('monto');
+        $retiros = $turno->movimientos->where('tipo', 'Retiro')->sum('monto');
+        $listaMovimientos = $turno->movimientos->map(function($m){
+            return ['tipo' => $m->tipo, 'monto' => $m->monto, 'concepto' => $m->concepto];
+        });
+
+        // 4. DENOMINACIONES
+        $denominaciones = is_string($turno->denominaciones_arqueo)
+            ? json_decode($turno->denominaciones_arqueo, true)
+            : $turno->denominaciones_arqueo;
+
+        return response()->json([
+            'folio' => $turno->id,
+            'fecha' => $turno->created_at->format('d/m/Y H:i'),
+            'cajero' => $turno->user->name,
+            'sucursal' => $turno->sucursal->nombre,
+            'productos' => $productosVendidos,
+            'finanzas' => [
+                'fondo_inicial' => $turno->saldo_inicial,
+                'ventas_efectivo' => $ventasEfectivo,
+                'ventas_tarjeta' => $ventasTarjeta,
+                'entradas' => $entradas,
+                'retiros' => $retiros,
+                'efectivo_esperado' => ($turno->saldo_inicial + $ventasEfectivo + $entradas) - $retiros,
+                'efectivo_contado' => $turno->saldo_cierre,
+                'diferencia' => $turno->diferencia
+            ],
+            'movimientos' => $listaMovimientos,
+            'denominaciones' => $denominaciones
+        ]);
+    }
 }
