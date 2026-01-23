@@ -22,7 +22,8 @@ class CajaTurno extends Model
         'saldo_cierre',
         'diferencia',
         'tarjeta_esperado',
-        'tarjeta_contado'
+        'tarjeta_contado',
+        'autorizado_por'
     ];
 
     protected $casts = [

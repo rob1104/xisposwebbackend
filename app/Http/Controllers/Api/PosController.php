@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CajaTurno;
 use App\Models\Producto;
+use App\Models\User;
 use App\Models\Venta;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class PosController extends Controller
 {
@@ -22,20 +24,29 @@ class PosController extends Controller
         $request->validate([
             'fondo_apertura' => 'required|numeric',
             'tipo_cambio' => 'required|numeric',
-            'sucursal_id' => 'required|exists:sucursales,id' // ID de la sucursal seleccionada
+            'sucursal_id' => 'required|exists:sucursales,id',
+            'supervisor_email' => 'required|exists:users,email',
+            'supervisor_password' => 'required'
         ]);
+
+        $supervisor = User::where('email', $request->supervisor_email)->first();
+
+        if(!Hash::check($request->supervisor_password, $supervisor->password)) {
+            return response()->json(['message' => 'Contraseña de supervisor incorrecta'], 422);
+        }
 
         $turno = CajaTurno::create([
             'user_id' => auth()->id(),
+            'autorizado_por' => $supervisor->id,
             'sucursale_id' => $request->sucursal_id,
-            'saldo_inicial' => $request->fondo_apertura, // Mapeo de nombre
+            'saldo_inicial' => $request->fondo_apertura,
             'tipo_cambio' => $request->tipo_cambio,
-            'abierto_at' => Carbon::now(), //
+            'abierto_at' => Carbon::now(),
             'status' => 'Abierto'
         ]);
 
         return response()->json([
-            'message' => 'Turno iniciado correctamente',
+            'message' => 'Turno autorizado e iniciado correctamente',
             'turno' => $turno
         ]);
     }
@@ -139,17 +150,32 @@ class PosController extends Controller
      */
     public function getByBarcode($codigo)
     {
+        // Buscamos el turno abierto del usuario para saber su sucursal_id
+        $turno = CajaTurno::where('user_id', auth()->id())
+            ->where('status', 'Abierto')
+            ->first();
+
+        if (!$turno) {
+            return response()->json(['message' => 'No tienes un turno abierto'], 403);
+        }
+
+        $sucursalId = $turno->sucursale_id;
+
         // Buscamos por código de barras o ID
         $producto = Producto::where('codigo_barras', $codigo)
             ->orWhere('id', $codigo)
-            ->with(['precios', 'impuestos']) // Cargamos precios e impuestos para el cálculo
+            ->with(['precios', 'impuestos'])
             ->first();
 
         if (!$producto) {
             return response()->json([
                 'message' => 'Producto no encontrado'
-            ], 404); // El 404 ahora será controlado
+            ], 404);
         }
+
+        $stockData = $producto->sucursales()->where('sucursal_id', $sucursalId)->first();
+        $stockActual = $stockData ? $stockData->pivot->stock_actual : 0;
+        
 
         // Buscamos el "PRECIO PUBLICO" por defecto para el POS
         $precioPublico = $producto->precios->where('nombre_lista', 'PRECIO PUBLICO')->first();
@@ -160,10 +186,10 @@ class PosController extends Controller
             'codigo_barras' => $producto->codigo_barras,
             'precio' => $precioPublico ? $precioPublico->precio : 0, // Campo usado en el frontend
             'impuestos' => $producto->impuestos,
-            'status' => $producto->status
+            'status' => $producto->status,
+            'stock_actual' => $stockActual
         ]);
     }
-
 
     /**
      * Búsqueda para el DIÁLOGO (Filtro por nombre o código)
