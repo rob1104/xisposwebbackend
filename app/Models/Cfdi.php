@@ -35,6 +35,8 @@ class Cfdi extends Model
 
     public function cliente() { return $this->belongsTo(Cliente::class); }
 
+    public function venta() { return $this->belongsTo(Venta::class); }
+
     public function sucursal() { return $this->belongsTo(Sucursal::class, 'sucursale_id', 'id'); }
 
     public function detalles() { return $this->hasMany(CfdiDetalle::class) ;}
