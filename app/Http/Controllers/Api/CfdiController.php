@@ -286,7 +286,7 @@ class CfdiController extends Controller
                     'acuse_path' => $pathAcuse ?? null
                 ]);
 
-                if ($statusLocal === 'Cancelada') {
+                if ($statusLocal === 'Cancelado') {
                     Venta::where('cfdi_id', $cfdi->id)->update(['cfdi_id' => null]);
                 }
                 return response()->json([
