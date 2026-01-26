@@ -249,7 +249,7 @@ class CfdiController extends Controller
         $cfdi = Cfdi::findOrFail($id);
 
         // Validaciones de seguridad
-        if ($cfdi->status === 'Cancelada') {
+        if ($cfdi->status === 'Cancelado') {
             return response()->json(['message' => 'La factura ya está cancelada'], 422);
         }
         if (!$cfdi->uuid) {
@@ -288,6 +288,8 @@ class CfdiController extends Controller
 
                 if ($statusLocal === 'Cancelado') {
                     Venta::where('cfdi_id', $cfdi->id)->update(['cfdi_id' => null]);
+                    $cfdi->venta_id = null;
+                    $cfdi->save();
                 }
                 return response()->json([
                     'success' => true,
