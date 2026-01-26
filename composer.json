@@ -10,6 +10,7 @@
         "ext-dom": "*",
         "ext-libxml": "*",
         "ext-openssl": "*",
+        "ext-simplexml": "*",
         "ext-soap": "*",
         "ext-xsl": "*",
         "barryvdh/laravel-dompdf": "^3.1",
@@ -20,10 +21,10 @@
         "laravel/tinker": "^2.10.1",
         "laraveles/spanish": "^1.5",
         "luecano/numero-a-letras": "^4.0",
+        "phpseclib/phpseclib": "^3.0",
         "simplesoftwareio/simple-qrcode": "^4.2",
         "spatie/laravel-activitylog": "^4.10",
-        "spatie/laravel-permission": "^6.24",
-        "ext-simplexml": "*"
+        "spatie/laravel-permission": "^6.24"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

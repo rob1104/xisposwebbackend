@@ -38,7 +38,9 @@ return [
     'finkok' => [
         'username'      => env('FINKOK_USERNAME'),
         'password'      => env('FINKOK_PASSWORD'),
+        'passphrase_cancel' => env('FINKOK_PASSHPRASECANCEL'),
         'url_stamp'     => env('FINKOK_URL_STAMP'),
+        'url_cancel'     => env('FINKOK_URL_CANCEL'),
         'url_utilities' => env('FINKOK_URL_UTILITIES'),
     ],
 

@@ -28,6 +28,9 @@ class Cfdi extends Model
         'exportacion',
         'xml_path',
         'pdf_path',
+        'motivo_cancelacion',
+        'fecha_cancelacion',
+        'acuse_path',
     ];
 
     public function cliente() { return $this->belongsTo(Cliente::class); }

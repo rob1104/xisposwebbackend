@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\FacturaMailable;
 use App\Models\Cfdi;
 use App\Models\Cliente;
 use App\Models\Setting;
@@ -12,12 +13,13 @@ use App\Services\FinkokService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Luecano\NumeroALetras\NumeroALetras;
 
 class CfdiController extends Controller
 {
-    protected $finkok;
+    protected FinkokService $finkok;
 
     public function __construct(FinkokService $finkok)
     {
@@ -28,7 +30,6 @@ class CfdiController extends Controller
     {
         $query = Cfdi::query()->with(['sucursal', 'cliente']);
 
-        // Filtrado por sucursal seleccionada
         if ($request->has('sucursal_id')) {
             $query->where('sucursale_id', $request->sucursal_id);
         }
@@ -106,139 +107,11 @@ class CfdiController extends Controller
         });
     }
 
-    public function descargarXml($id)
-    {
-        // 1. Buscar el registro en la tabla cfdis
-        $cfdi = Cfdi::findOrFail($id);
-
-        // 2. Verificar si la ruta del XML existe en la base de datos y en el disco
-        if (!$cfdi->xml_path || !Storage::disk('private')->exists($cfdi->xml_path)) {
-            return response()->json(['message' => 'El archivo XML no existe en el servidor.'], 404);
-        }
-
-        $file = Storage::disk('private')->get($cfdi->xml_path);
-
-        return response($file, 200)
-            ->header('Content-Type', 'text/xml')
-            // Permitimos que el frontend vea el tamaño y tipo si es necesario
-            ->header('Access-Control-Expose-Headers', 'Content-Disposition');
-    }
-
-
-    public function reintentar($id)
-    {
-        // 1. Cargamos el CFDI con sus detalles y productos
-        $cfdi = \App\Models\Cfdi::with(['detalles.producto', 'sucursal.emisor', 'cliente'])->findOrFail($id);
-
-        if ($cfdi->status === 'Vigente') {
-            return response()->json(['message' => 'Esta factura ya está timbrada.'], 422);
-        }
-
-        return \DB::transaction(function () use ($cfdi) {
-            $subtotalCalculado = 0;
-            $impuestosCalculados = 0;
-
-            // 2. RE-CALIBRACIÓN: Actualizamos cada detalle con la tasa oficial del catálogo
-            foreach ($cfdi->detalles as $det) {
-                $producto = $det->producto;
-
-                // Buscamos el impuesto configurado actualmente en el catálogo
-                $impuestoConfigurado = $producto->impuestos()
-                    ->where('tipo', 'Traslado')
-                    ->first();
-
-
-
-                // Obtenemos el porcentaje real (ej. 0.160000 o 0.080000)
-                $tasaSAT = $impuestoConfigurado ? (float) $impuestoConfigurado->porcentaje : 0.160000;
-
-                // Recalculamos el importe del impuesto basado en la tasa oficial
-                $nuevoImpuestoImporte = round($det->impuesto_base * $tasaSAT, 2);
-
-                // Actualizamos el registro en la base de datos
-                $det->update([
-                    'impuesto_tasa_cuota' => number_format($tasaSAT, 6, '.', ''),
-                    'impuesto_importe'    => $nuevoImpuestoImporte
-                ]);
-
-                $subtotalCalculado += round($det->importe, 2);
-                $impuestosCalculados += $nuevoImpuestoImporte;
-            }
-
-            // 3. Actualizamos los totales del encabezado para evitar el error de redondeo
-            $cfdi->update([
-                'subtotal'  => $subtotalCalculado,
-                'impuestos' => $impuestosCalculados,
-                'total'     => $subtotalCalculado + $impuestosCalculados
-            ]);
-
-            // 4. Preparamos los datos del receptor (del cliente vinculado)
-            $receptor = [
-                'rfc'      => $cfdi->cliente->rfc,
-                'nombre'   => $cfdi->cliente->razon_social,
-                'cp'       => $cfdi->cliente->codigo_postal,
-                'regimen'  => $cfdi->cliente->tax_regime_id,
-                'uso_cfdi' => $cfdi->uso_cfdi
-            ];
-            // 5. Llamamos al servicio de Finkok con los datos corregidos
-            $finkok = new FinkokService();
-            $resultado = $finkok->crearYTimbrar($cfdi, $receptor);
-
-            if ($resultado['success']) {
-                $cfdi->update([
-                    'uuid'     => $resultado['uuid'],
-                    'status'   => 'Vigente',
-                    'xml_path' => $resultado['xml_path']
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => '¡Reintento exitoso! Factura timbrada.',
-                    'uuid'    => $resultado['uuid']
-                ]);
-            }
-
-            throw new \Exception($resultado['message']);
-        });
-    }
-
     public function timbrar(Request $request)
     {
         $venta = Venta::with(['detalles.producto.impuestos', 'sucursal.emisor'])->findOrFail($request->venta_id);
 
-        $subtotalFactura = 0;
-        $impuestosFactura = 0;
-        $detallesCalculados = [];
-
-        // 1. PRIMER PASO: Calcular y redondear cada línea
-        foreach ($venta->detalles as $det) {
-            $producto = $det->producto;
-            // Obtener tasa (si es 8.00 lo convierte a 0.080000)
-            $impConfig = $producto->impuestos->where('tipo', 'Traslado')->first();
-            $porcentaje = $impConfig ? (float)$impConfig->porcentaje : 16.00;
-            $tasaDecimal = $porcentaje > 1 ? $porcentaje / 100 : $porcentaje;
-
-            // Redondeo estricto a 2 decimales por concepto
-            $importeLinea = round($det->cantidad * $det->precio_unitario, 2);
-            $impuestoLinea = round($importeLinea * $tasaDecimal, 2);
-
-            $detallesCalculados[] = [
-                'producto_id'         => $det->producto_id,
-                'clave_prod_serv'     => $producto->clave_prod_serv ?? '01010101',
-                'clave_unidad'        => $producto->clave_unidad ?? 'H87',
-                'descripcion'         => mb_strtoupper($producto->nombre),
-                'cantidad'            => $det->cantidad,
-                'valor_unitario'      => $det->precio_unitario,
-                'importe'             => $importeLinea,
-                'impuesto_base'       => $importeLinea,
-                'impuesto_importe'    => $impuestoLinea,
-                'impuesto_tasa_cuota' => number_format($tasaDecimal, 6, '.', ''),
-                'objeto_imp'          => '02'
-            ];
-
-            $subtotalFactura += $importeLinea;
-            $impuestosFactura += $impuestoLinea;
-        }
+        $calculos = $this->calcularDesgloseVenta($venta);
 
         if ($request->actualizar_catalogo && $request->receptor['cliente_id']) {
             $cliente = Cliente::find($request->receptor['cliente_id']);
@@ -259,7 +132,7 @@ class CfdiController extends Controller
             ->max('folio');
         $nuevoFolio = ($ultimoFolio ?? 0) + 1;
 
-        // 2. SEGUNDO PASO: Crear el encabezado con los totales ya calculados
+        // Crear el encabezado con los totales ya calculados
         $cfdi = Cfdi::create([
             'sucursale_id' => $venta->sucursale_id,
             'user_id'      => auth()->id(),
@@ -268,26 +141,26 @@ class CfdiController extends Controller
             'status'       => 'Pendiente',
             'serie'        => $serie,
             'folio'        => $nuevoFolio,
-            'subtotal'     => $subtotalFactura,  // Ya no será null
-            'impuestos'    => $impuestosFactura,
-            'total'        => $subtotalFactura + $impuestosFactura,
+            'subtotal'     => $calculos['subtotal'],
+            'impuestos'    => $calculos['impuestos'],
+            'total'        => $calculos['total'],
             'forma_pago'   => $request->receptor['forma_pago'],
             'metodo_pago'  => 'PUE',
             'uso_cfdi'     => $request->receptor['uso_cfdi'],
             'exportacion'  => '01',
         ]);
 
-        // 3. TERCER PASO: Guardar los detalles
-        foreach ($detallesCalculados as $detalle) {
+        // Guardar los detalles
+        foreach ($calculos['detalles'] as $detalle) {
             $cfdi->detalles()->create($detalle);
         }
 
-        // 4. CUARTO PASO: Timbrar
+        // Timbrar
         $cfdi->load('sucursal.emisor', 'detalles');
         $finkok = new FinkokService();
         $resultado = $finkok->crearYTimbrar($cfdi, $request->receptor);
-        $cfdi->update(['xml_path' => $resultado['xml_path']]);
 
+        $cfdi->update(['xml_path' => $resultado['xml_path']]);
         if ($resultado['success']) {
             $cfdi->update([
                 'uuid'   => $resultado['uuid'],
@@ -295,49 +168,186 @@ class CfdiController extends Controller
             ]);
             return response()->json(['success' => true, 'uuid' => $resultado['uuid']]);
         }
-
-        // Si falló, devolvemos el error pero el registro y el XML ya están en el servidor
         return response()->json([
             'success' => false,
             'message' => 'Error al timbrar: ' . $resultado['message'],
-            'cfdi_id' => $cfdi->id // Para que el frontend sepa cuál registro quedó pendiente
+            'cfdi_id' => $cfdi->id
         ], 422);
-
     }
 
-    // App\Http\Controllers\Api\FacturaController.php
+    public function reintentar($id)
+    {
+        // Cargar CFDI y su Venta asociada (necesitas la relación 'venta' en el modelo Cfdi)
+        $cfdi = Cfdi::with(['venta.detalles.producto.impuestos', 'cliente', 'sucursal.emisor'])->findOrFail($id);
+        if ($cfdi->status === 'Vigente') {
+            return response()->json(['message' => 'Esta factura ya está timbrada.'], 422);
+        }
+
+        // Validar que exista la venta ligada
+        if (!$cfdi->venta) {
+            return response()->json(['message' => 'No se encontró la venta original asociada a este CFDI.'], 422);
+        }
+
+        return DB::transaction(function () use ($cfdi) {
+
+            // REUTILIZAR EL CÁLCULO CENTRALIZADO
+            // Usamos la venta original para recalcular exactamente igual que en 'timbrar'
+            $calculos = $this->calcularDesgloseVenta($cfdi->venta);
+
+            // ACTUALIZAR ENCABEZADO
+            $cfdi->update([
+                'subtotal'  => $calculos['subtotal'],
+                'impuestos' => $calculos['impuestos'],
+                'total'     => $calculos['total']
+            ]);
+
+            // REGENERAR DETALLES
+            // Borramos los detalles viejos (que podrían tener error) y ponemos los nuevos calculados
+            $cfdi->detalles()->delete();
+            $cfdi->detalles()->createMany($calculos['detalles']);
+
+            // PREPARAR DATOS DEL RECEPTOR
+            // En reintentar no tenemos $request->receptor, así que los tomamos de la DB
+            $receptor = [
+                'rfc'      => $cfdi->cliente->rfc,
+                'nombre'   => $cfdi->cliente->razon_social,
+                'cp'       => $cfdi->cliente->codigo_postal,
+                'regimen'  => $cfdi->cliente->tax_regime_id,
+                'uso_cfdi' => $cfdi->uso_cfdi,
+                'forma_pago' => $cfdi->forma_pago // Importante pasar la forma de pago guardada
+            ];
+
+            // TIMBRAR
+            $cfdi->load('sucursal.emisor', 'detalles'); // Recargar relaciones
+            $finkok = new FinkokService();
+            $resultado = $finkok->crearYTimbrar($cfdi, $receptor);
+
+            if ($resultado['success']) {
+                $cfdi->update([
+                    'uuid'     => $resultado['uuid'],
+                    'status'   => 'Vigente',
+                    'xml_path' => $resultado['xml_path']
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => '¡Reintento exitoso! Factura timbrada.',
+                    'uuid'    => $resultado['uuid']
+                ]);
+            }
+            throw new \Exception($resultado['message']);
+        });
+    }
+
+    public function cancelar(Request $request, $id)
+    {
+        $request->validate([
+            'motivo' => 'required|in:01,02,03,04',
+            'uuid_sustituicion' => 'nullable|string'
+        ]);
+
+        $cfdi = Cfdi::findOrFail($id);
+
+        // Validaciones de seguridad
+        if ($cfdi->status === 'Cancelada') {
+            return response()->json(['message' => 'La factura ya está cancelada'], 422);
+        }
+        if (!$cfdi->uuid) {
+            return response()->json(['message' => 'No se puede cancelar una factura sin UUID'], 422);
+        }
+
+        // Validación estricta SAT para motivo 01
+        if ($request->motivo === '01' && empty($request->uuid_sustitucion)) {
+            return response()->json(['message' => 'Para el motivo 01 es obligatorio el UUID de sustitución'], 422);
+        }
+
+        try {
+            $finkok = new FinkokService();
+            $resultado = $finkok->cancelarCfdi($cfdi, $request->motivo, $request->uuid_sustitucion);
+            if ($resultado['success']) {
+                $statusLocal = 'Cancelado';
+                $mensaje = 'Factura cancelada correctamente';
+                if (isset($resultado['codigo_estatus']) && $resultado['codigo_estatus'] == '203') {
+                    $statusLocal = 'En Proceso Cancelacion';
+                    $mensaje = 'Solicitud enviada. Esperando aprobación del receptor en Buzón Tributario.';
+                }
+
+                $pathAcuse = null;
+                if(!empty($resultado['acuse'])) {
+                    $pathAcuse = "cfdis/acuses/acuse_{$cfdi->uuid}.xml";
+                    \Storage::disk('private')->put($pathAcuse, $resultado['acuse']);
+                }
+
+
+                $cfdi->update([
+                    'status' => $statusLocal,
+                    'motivo_cancelacion' => $request->motivo,
+                    'fecha_cancelacion' => now(),
+                    'acuse_path' => $pathAcuse ?? null
+                ]);
+
+                if ($statusLocal === 'Cancelada') {
+                    Venta::where('cfdi_id', $cfdi->id)->update(['cfdi_id' => null]);
+                }
+                return response()->json([
+                    'success' => true,
+                    'message' => $mensaje,
+                    'status_sat' => $resultado['codigo_estatus'] ?? '201',
+                    'acuse' => $resultado['acuse'] ?? null // XML de acuse
+                ]);
+            }
+            else {
+                throw new \Exception($resultado['message']);
+            }
+        }
+        catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al cancelar ante el SAT',
+                'error_sat' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function descargarXml($id)
+    {
+        // 1. Buscar el registro en la tabla cfdis
+        $cfdi = Cfdi::findOrFail($id);
+        // 2. Verificar si la ruta del XML existe en la base de datos y en el disco
+        if (!$cfdi->xml_path || !Storage::disk('private')->exists($cfdi->xml_path)) {
+            return response()->json(['message' => 'El archivo XML no existe en el servidor.'], 404);
+        }
+        $file = Storage::disk('private')->get($cfdi->xml_path);
+        return response($file, 200)
+            ->header('Content-Type', 'text/xml')
+            // Permitimos que el frontend vea el tamaño y tipo si es necesario
+            ->header('Access-Control-Expose-Headers', 'Content-Disposition');
+    }
 
     public function destroy($id)
     {
         $cfdi = Cfdi::findOrFail($id);
-
         // SEGURIDAD: Si ya tiene UUID, no se puede borrar, se debe cancelar
         if ($cfdi->uuid || $cfdi->status === 'Vigente') {
             return response()->json([
                 'message' => 'No se puede eliminar un CFDI timbrado. Debe utilizar la opción de Cancelar.'
             ], 422);
         }
-
         // 1. Borrar el archivo físico (borrador) si existe
         if ($cfdi->xml_path && \Storage::disk('private')->exists($cfdi->xml_path)) {
             \Storage::disk('private')->delete($cfdi->xml_path);
         }
-
         // 2. Eliminar de la base de datos (los detalles se borran por cascada o manualmente)
         $cfdi->detalles()->delete();
         $cfdi->delete();
-
         return response()->json(['message' => 'Borrador eliminado correctamente']);
     }
 
     public function generarPdf($id)
     {
         $cfdi = Cfdi::with('sucursal.emisor')->findOrFail($id);
-
         $logoBase64 = null;
         $setts = Setting::where('clave', 'logo_url')->first();
         $pathLogo = $setts->valor;
-
         if ($pathLogo) {
             // 1. Convertimos la URL en una ruta de carpeta real
             // Reemplazamos la URL base por la ruta física del servidor
@@ -529,6 +539,52 @@ class CfdiController extends Controller
         $nombreDescarga = "Factura_{$cfdi->serie}{$cfdi->folio}.pdf";
         return \Storage::disk('private')->download($cfdi->pdf_path, $nombreDescarga);
     }
+
+    public function descargarAcuse($id)
+    {
+        $cfdi = Cfdi::with('sucursal.emisor')->findOrFail($id);
+
+        if (!$cfdi->acuse_path || !\Storage::disk('private')->exists($cfdi->acuse_path)) {
+            return response()->json(['message' => 'El acuse XML no se encuentra en el servidor.'], 404);
+        }
+
+        $xmlContent = \Storage::disk('private')->get($cfdi->acuse_path);
+
+        // Limpieza de prefijos SOAP comunes para facilitar lectura
+        $xmlClean = str_replace(['s:', 'S:', 'soap:', 'ns1:'], '', $xmlContent);
+        $xml = new \SimpleXMLElement($xmlClean);
+
+        // 1. ENCONTRAR EL NODO REAL "CancelaCFDResult"
+        // Usamos xpath para buscarlo donde sea que esté (ignorando si hay Envelope/Body antes)
+        $nodosResultado = $xml->xpath('//CancelaCFDResult') ?: $xml->xpath('//*[local-name()="CancelaCFDResult"]');
+
+        // Si no encuentra el nodo específico, asumimos que el XML es el resultado
+        $resultNode = count($nodosResultado) > 0 ? $nodosResultado[0] : $xml;
+
+        // 2. ENCONTRAR EL SELLO (SignatureValue)
+        // El sello suele estar protegido por namespaces, lo buscamos por su nombre local
+        $nodosFirma = $xml->xpath('//*[local-name()="SignatureValue"]');
+        $selloSat = count($nodosFirma) > 0 ? (string)$nodosFirma[0] : 'No disponible';
+
+        // 3. EXTRAER DATOS
+        $datosAcuse = [
+            // Fecha y RFC son ATRIBUTOS de CancelaCFDResult
+            'fecha' => (string) $resultNode['Fecha'],
+            'rfc_emisor' => (string) $resultNode['RfcEmisor'],
+            // UUID y Estatus son TEXTO dentro de <Folios>, NO atributos
+            'folio_fiscal' => (string) ($resultNode->Folios->UUID ?? $cfdi->uuid),
+            'estatus' => (string) ($resultNode->Folios->EstatusUUID ?? 'Cancelado'),
+
+            'sello_sat' => $selloSat,
+
+            'cadena_original' => "||{$cfdi->uuid}|{$cfdi->cliente->rfc}|" . ((string)$resultNode['Fecha'] ?? date('Y-m-d')) . "||"
+        ];
+
+        $pdf = Pdf::loadView('pdf.acuse_cancelacion', compact('cfdi', 'datosAcuse'));
+
+        return $pdf->download("Acuse_Cancelacion_{$cfdi->folio}.pdf");
+    }
+
     public function ventasPendientes(Request $request)
     {
         $ventas = Venta::where('sucursale_id', $request->sucursal_id)
@@ -544,5 +600,118 @@ class CfdiController extends Controller
         $path = "cfdis/xml/factura_{$id}.xml";
         Storage::disk('public')->put($path, $xmlContent);
         return $path;
+    }
+
+    public function enviarCorreo($id)
+    {
+        $cfdi = Cfdi::with(['cliente', 'sucursal'])->findOrFail($id);
+
+        // 1. Validar que el cliente tenga correo
+        if (empty($cfdi->cliente->email)) {
+            return response()->json(['message' => 'El cliente no tiene un correo electrónico registrado.'], 422);
+        }
+
+        // 2. Validar que existan los archivos (para no enviar correo vacío)
+        if (!$cfdi->xml_path || !Storage::disk('private')->exists($cfdi->xml_path)) {
+            return response()->json(['message' => 'El archivo XML no se encuentra disponible.'], 404);
+        }
+
+        // Si no tiene PDF, intentamos generarlo al vuelo antes de enviar
+        if (!$cfdi->pdf_path || !Storage::disk('private')->exists($cfdi->pdf_path)) {
+            // Llamamos a tu función interna (asegúrate que generarPdf sea accesible o copia la lógica)
+            $this->generarPdf($id);
+            $cfdi->refresh(); // Recargamos para obtener el path nuevo
+        }
+
+        try {
+            // 3. Enviar el correo
+            Mail::to($cfdi->cliente->email)
+                ->send(new FacturaMailable($cfdi));
+
+            $adjuntos = [];
+            if ($cfdi->xml_path) $adjuntos[] = 'XML';
+            if ($cfdi->pdf_path) $adjuntos[] = 'PDF';
+
+            activity()
+                ->performedOn($cfdi)
+                ->inLog('email')
+                ->causedBy(auth()->user())
+                ->withProperties([
+                    'accion' => 'envio_correo_cfdi',
+                    'destinatario' => $cfdi->cliente->email,
+                    'archivos_adjuntos' => $adjuntos,
+                    'ip_origen' => request()->ip(),
+                    'navegador' => request()->userAgent(),
+                    'mensaje_sistema' => 'Envío exitoso mediante servidor SMTP'
+                ])
+                ->log('Se envió cfdi por correo electrónico');
+
+            return response()->json([
+                'success' => true,
+                'message' => "Correo enviado exitosamente a: {$cfdi->cliente->email}"
+            ]);
+
+        } catch (\Exception $e) {
+
+            activity()
+                ->performedOn($cfdi)
+                ->inLog('email')
+                ->causedBy(auth()->user())
+                ->withProperties(['error' => $e->getMessage()])
+                ->log('Fallo al enviar correo de factura');
+
+            return response()->json([
+                'message' => 'Error al intentar enviar el correo.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Lógica centralizada para calcular los detalles de la factura
+     * basada en una Venta, aplicando redondeos estrictos.
+     */
+    private function calcularDesgloseVenta(Venta $venta)
+    {
+        $subtotalFactura = 0;
+        $impuestosFactura = 0;
+        $detallesCalculados = [];
+
+        foreach ($venta->detalles as $det) {
+            $producto = $det->producto;
+
+            // Obtener tasa (si es 16.00 lo convierte a 0.160000)
+            $impConfig = $producto->impuestos->where('tipo', 'Traslado')->first();
+            $porcentaje = $impConfig ? (float)$impConfig->porcentaje : 16.00;
+            $tasaDecimal = $porcentaje > 1 ? $porcentaje / 100 : $porcentaje;
+
+            // Redondeo estricto a 2 decimales por concepto (Igual que en timbrar)
+            $importeLinea = round($det->cantidad * $det->precio_unitario, 2);
+            $impuestoLinea = round($importeLinea * $tasaDecimal, 2);
+
+            $detallesCalculados[] = [
+                'producto_id'         => $det->producto_id,
+                'clave_prod_serv'     => $producto->clave_prod_serv ?? '01010101',
+                'clave_unidad'        => $producto->clave_unidad ?? 'H87',
+                'descripcion'         => mb_strtoupper($producto->nombre),
+                'cantidad'            => $det->cantidad,
+                'valor_unitario'      => $det->precio_unitario,
+                'importe'             => $importeLinea,
+                'impuesto_base'       => $importeLinea,
+                'impuesto_importe'    => $impuestoLinea,
+                'impuesto_tasa_cuota' => number_format($tasaDecimal, 6, '.', ''),
+                'objeto_imp'          => '02'
+            ];
+
+            $subtotalFactura += $importeLinea;
+            $impuestosFactura += $impuestoLinea;
+        }
+
+        return [
+            'detalles'  => $detallesCalculados,
+            'subtotal'  => $subtotalFactura,
+            'impuestos' => $impuestosFactura,
+            'total'     => $subtotalFactura + $impuestosFactura
+        ];
     }
 }

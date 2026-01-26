@@ -36,8 +36,35 @@ class ProductoController extends Controller
             }
 
             if ($request->has('precios')) {
-                $producto->precios()->delete();
-                $producto->precios()->createMany($request->precios);
+                $nuevosPrecios = collect($request->precios);
+
+                // 1. OBTENER LISTAS VIGENTES
+                // Extraemos los nombres de las listas que vienen en este guardado (ej. 'Mayoreo', 'Publico')
+                $listasVigentes = $nuevosPrecios->pluck('nombre_lista')->filter();
+
+                // 2. BORRAR LAS QUE SOBRAN (Limpieza)
+                // Si tenías una lista "Liquidación" en la BD y ya no viene en el request, se borra.
+                // Esto generará un log DELETED correcto.
+                $producto->precios()
+                    ->whereNotIn('nombre_lista', $listasVigentes)
+                    ->delete();
+
+                // 3. SINCRONIZAR (Update or Create)
+                foreach ($nuevosPrecios as $datosPrecio) {
+                    // Buscamos dentro de los precios de ESTE producto
+                    $producto->precios()->updateOrCreate(
+                    // A. CRITERIO DE BÚSQUEDA (El "Match")
+                        [
+                            'nombre_lista' => $datosPrecio['nombre_lista']
+                        ],
+                        // B. VALORES A GUARDAR (Si existe actualiza, si no crea)
+                        [
+                            'precio' => $datosPrecio['precio'],
+                            // Agregamos utilidad_porcentaje ya que tu tabla lo requiere (No Nulo)
+                            'utilidad_porcentaje' => $datosPrecio['utilidad_porcentaje'] ?? 0
+                        ]
+                    );
+                }
             }
 
             if ($request->tipo_producto === 'Compuesto') {
@@ -73,8 +100,35 @@ class ProductoController extends Controller
             }
 
             if ($request->has('precios')) {
-                $producto->precios()->delete();
-                $producto->precios()->createMany($request->precios);
+                $nuevosPrecios = collect($request->precios);
+
+                // 1. OBTENER LISTAS VIGENTES
+                // Extraemos los nombres de las listas que vienen en este guardado (ej. 'Mayoreo', 'Publico')
+                $listasVigentes = $nuevosPrecios->pluck('nombre_lista')->filter();
+
+                // 2. BORRAR LAS QUE SOBRAN (Limpieza)
+                // Si tenías una lista "Liquidación" en la BD y ya no viene en el request, se borra.
+                // Esto generará un log DELETED correcto.
+                $producto->precios()
+                    ->whereNotIn('nombre_lista', $listasVigentes)
+                    ->delete();
+
+                // 3. SINCRONIZAR (Update or Create)
+                foreach ($nuevosPrecios as $datosPrecio) {
+                    // Buscamos dentro de los precios de ESTE producto
+                    $producto->precios()->updateOrCreate(
+                    // A. CRITERIO DE BÚSQUEDA (El "Match")
+                        [
+                            'nombre_lista' => $datosPrecio['nombre_lista']
+                        ],
+                        // B. VALORES A GUARDAR (Si existe actualiza, si no crea)
+                        [
+                            'precio' => $datosPrecio['precio'],
+                            // Agregamos utilidad_porcentaje ya que tu tabla lo requiere (No Nulo)
+                            'utilidad_porcentaje' => $datosPrecio['utilidad_porcentaje'] ?? 0
+                        ]
+                    );
+                }
             }
 
             if ($request->tipo_producto === 'Compuesto' && $request->has('componentes')) {

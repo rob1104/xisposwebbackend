@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Activity;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 class ProductoPrecio extends Model
@@ -24,4 +26,5 @@ class ProductoPrecio extends Model
             ->logOnlyDirty()
             ->useLogName('Productos Precio');
     }
+
 }

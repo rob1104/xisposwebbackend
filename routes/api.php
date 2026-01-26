@@ -71,16 +71,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('cfdis')->group(function () {
         Route::post('/timbrar', [CfdiController::class, 'timbrar'])->name('cfdis.timbrar');
-        Route::get('/{id}/xml', [CfdiController::class, 'descargarXml']);
-        Route::post('/{id}/reintentar', [CfdiController::class, 'reintentar']);
-        Route::get('/{id}/pdf', [CfdiController::class, 'descargarPdf']);
-        Route::post('/{id}/generar-pdf', [CfdiController::class, 'generarPdf']);
+        Route::get('/{id}/xml', [CfdiController::class, 'descargarXml'])->name('cfdis.xml');
+        Route::post('/{id}/enviar-correo', [CfdiController::class, 'enviarCorreo'])->name('cfdis.enviar-correo');
+        Route::post('/{id}/reintentar', [CfdiController::class, 'reintentar'])->name('cfdis.reintentar');
+        Route::post('/{id}/cancelar', [CfdiController::class, 'cancelar'])->name('cfdis.cancelar');
+        Route::get('/{id}/acuse', [CfdiController::class, 'descargarAcuse'])->name('cfdis.acuse');
+        Route::get('/{id}/pdf', [CfdiController::class, 'descargarPdf'])->name('cfdis.pdf');
+        Route::post('/{id}/generar-pdf', [CfdiController::class, 'generarPdf'])->name('cfdis.generar-pdf');
         Route::get('/ventas/pendientes', [CfdiController::class, 'ventasPendientes'])->name('cfdis.ventas.pendientes');
     });
 
     Route::post('/sucursales/{id}/emisor', [SucursalController::class, 'updateEmisor'])->name('sucursales.emisor.update');
     Route::get('/sucursales/{id}/emisor', [SucursalController::class, 'getEmisor'])->name('sucursales.emisor.get');
-
 
     Route::get('/auditoria/productos-sucursal/{sucursal_id}', [AuditoriaInventarioController::class, 'obtenerProductosParaConteo']);
     Route::post('/auditoria/procesar', [AuditoriaInventarioController::class, 'procesarConteo']);
