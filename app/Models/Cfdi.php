@@ -41,6 +41,11 @@ class Cfdi extends Model
 
     public function detalles() { return $this->hasMany(CfdiDetalle::class) ;}
 
+    public function ventas()
+    {
+        return $this->belongsToMany(Venta::class, 'cfdi_venta')->withPivot('monto_facturado');
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

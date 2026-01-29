@@ -56,7 +56,7 @@ class CfdiController extends Controller
     {
         // 1. Validar que las ventas seleccionadas existan y no estén facturadas (Candado)
         $ventas = Venta::whereIn('id', $request->ventas_ids)
-            ->whereNull('cfdi_id')
+            ->where('facturado', false)
             ->where('status', '!=', 'Cancelada')
             ->get();
 
@@ -86,8 +86,15 @@ class CfdiController extends Controller
                 'impuestos'   => $ventas->sum('impuestos'),
             ]);
 
+            foreach($ventas as $venta) {
+                $cfdi->ventas()->attach($venta->id, [
+                    'monto_facturado' => $venta->total
+                ]);
+            }
+
             // 4. Crear detalles y asociar ventas
             $cfdi->generarDetallesDesdeVentas($ventas);
+
             Venta::whereIn('id', $request->ventas_ids)->update(['cfdi_id' => $cfdi->id]);
 
             // 5. Timbrar con el servicio
@@ -110,6 +117,10 @@ class CfdiController extends Controller
     public function timbrar(Request $request)
     {
         $venta = Venta::with(['detalles.producto.impuestos', 'sucursal.emisor'])->findOrFail($request->venta_id);
+
+        if($venta->facturado) {
+            return response()->json(['message' => 'Esta venta ya fue facturada'], 422);
+        }
 
         $calculos = $this->calcularDesgloseVenta($venta);
 
@@ -150,6 +161,8 @@ class CfdiController extends Controller
             'exportacion'  => '01',
         ]);
 
+        $cfdi->ventas()->attach($venta->id, ['monto_facturado' => $venta->total]);
+
         // Guardar los detalles
         foreach ($calculos['detalles'] as $detalle) {
             $cfdi->detalles()->create($detalle);
@@ -159,7 +172,7 @@ class CfdiController extends Controller
         $cfdi->load('sucursal.emisor', 'detalles');
         $finkok = new FinkokService();
         $resultado = $finkok->crearYTimbrar($cfdi, $request->receptor);
-
+        $venta->update(['facturado' => true]);
         $cfdi->update(['xml_path' => $resultado['xml_path']]);
         if ($resultado['success']) {
             $cfdi->update([
@@ -178,7 +191,12 @@ class CfdiController extends Controller
     public function reintentar($id)
     {
         // Cargar CFDI y su Venta asociada (necesitas la relación 'venta' en el modelo Cfdi)
-        $cfdi = Cfdi::with(['venta.detalles.producto.impuestos', 'cliente', 'sucursal.emisor'])->findOrFail($id);
+        $cfdi = Cfdi::with(['ventas.detalles.producto.impuestos', 'cliente', 'sucursal.emisor'])->findOrFail($id);
+
+        if($cfdi->ventas->isEmpty()) {
+            return response()->json(['message' => 'No se encontraron ventas asociadas.'], 422);
+        }
+
         if ($cfdi->status === 'Vigente') {
             return response()->json(['message' => 'Esta factura ya está timbrada.'], 422);
         }
@@ -192,7 +210,8 @@ class CfdiController extends Controller
 
             // REUTILIZAR EL CÁLCULO CENTRALIZADO
             // Usamos la venta original para recalcular exactamente igual que en 'timbrar'
-            $calculos = $this->calcularDesgloseVenta($cfdi->venta);
+            $ventaPrincipal = $cfdi->ventas->first();
+            $calculos = $this->calcularDesgloseVenta($ventaPrincipal);
 
             // ACTUALIZAR ENCABEZADO
             $cfdi->update([
@@ -290,12 +309,16 @@ class CfdiController extends Controller
                     Venta::where('cfdi_id', $cfdi->id)->update(['cfdi_id' => null]);
                     $cfdi->venta_id = null;
                     $cfdi->save();
+
+                    $ventasIds = $cfdi->ventas()->pluck('ventas.id');
+                    Venta::whereIn('id', $ventasIds)->update(['facturado' => false]);
+
                 }
                 return response()->json([
                     'success' => true,
                     'message' => $mensaje,
                     'status_sat' => $resultado['codigo_estatus'] ?? '201',
-                    'acuse' => $resultado['acuse'] ?? null // XML de acuse
+                    'acuse' => $resultado['acuse'] ?? null
                 ]);
             }
             else {
@@ -338,6 +361,11 @@ class CfdiController extends Controller
         if ($cfdi->xml_path && \Storage::disk('private')->exists($cfdi->xml_path)) {
             \Storage::disk('private')->delete($cfdi->xml_path);
         }
+
+        $ventasIds = $cfdi->ventas()->pluck('ventas.id');
+        Venta::whereIn('id', $ventasIds)->update(['facturado' => false]);
+        $cfdi->ventas()->detach();
+
         // 2. Eliminar de la base de datos (los detalles se borran por cascada o manualmente)
         $cfdi->detalles()->delete();
         $cfdi->delete();
@@ -590,11 +618,11 @@ class CfdiController extends Controller
     public function ventasPendientes(Request $request)
     {
         $ventas = Venta::where('sucursale_id', $request->sucursal_id)
-            ->whereDoesntHave('cfdi')
+            ->where('facturado', false)
+            ->where('status', '!=', 'Cancelada')
             ->with('cliente')
             ->orderBy('created_at', 'desc')
             ->get();
-
         return response()->json($ventas);
     }
 

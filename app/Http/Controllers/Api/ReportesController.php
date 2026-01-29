@@ -41,8 +41,7 @@ class ReportesController extends Controller
 
     public function ventasDetalladasexportarPdf(Request $request)
     {
-        $user = auth()->user();
-        $sucursal_id = $user->hasRole('admin') ? $request->sucursal_id : $user->sucursale_id;
+        $sucursal_id = $request->sucursal_id;
 
         // Aseguramos el formato de fecha para MySQL
         $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
@@ -51,7 +50,7 @@ class ReportesController extends Controller
         $ventas = Venta::with(['detalles.producto', 'pagos', 'cliente', 'sucursal'])
             ->whereBetween('created_at', [$fecha_inicio, $fecha_fin])
             ->when($sucursal_id, function($q) use ($sucursal_id) {
-                return $q->where('sucursale_id', $sucursal_id); // Columna exacta de tu DB
+                return $q->where('sucursale_id', $sucursal_id);
             })
             ->where('status', 'Completada')
             ->get();

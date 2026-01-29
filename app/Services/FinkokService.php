@@ -27,7 +27,7 @@ class FinkokService
         $this->url = config('services.finkok.url_stamp');
     }
 
-    public function crearYTimbrar(Cfdi $cfdi, array $datosReceptor)
+    public function crearYTimbrar(Cfdi $cfdi, array $datosReceptor, array $informacionGlobal = null)
     {
         try {
             if (!$cfdi->sucursal || !$cfdi->sucursal->emisor) {
@@ -59,6 +59,14 @@ class FinkokService
             ], $certificado);
 
             $comprobante = $creator->comprobante();
+
+            if($informacionGlobal) {
+                $comprobante->addInformacionGlobal([
+                    'Periodicidad' => $informacionGlobal['Periodicidad'],
+                    'Meses'        => $informacionGlobal['Meses'],
+                    'Año'          => $informacionGlobal['Año']
+                ]);
+            }
 
             // CORRECCIÓN PARA FINKOK: Agregar namespace tfd y schemaLocation completo
             $comprobante->addAttributes([

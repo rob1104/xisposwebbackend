@@ -15,7 +15,7 @@ class DashboardController extends Controller
     public function getSummary(Request $request)
     {
         $sucursalId = $request->query('sucursal_id');
-        $diasAnalisis = 30; // Período para calcular el promedio
+        $diasAnalisis = 30;
 
         // 1. CÁLCULO DE VENTAS DIARIAS PROMEDIO (Últimos 30 días)
         $queryVentas = Venta::where('status', 'Completada') // Filtramos canceladas

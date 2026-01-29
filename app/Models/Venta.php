@@ -28,7 +28,8 @@ class Venta extends Model
         'tarjeta_ultimos_4',
         'efectivo_recibido',
         'cambio_entregado',
-        'cfdi_id'
+        'cfdi_id',
+        'facturado'
     ];
 
     public function detalles()
@@ -66,11 +67,14 @@ class Venta extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function scopeAptasParaFacturar($query)
+    public function scopePendientes($query)
     {
-        return $query->whereNull('cfdi_id') // No tiene factura asociada
-        ->where('status', '!=', 'Cancelada'); // No está cancelada
+        return $query->where('facturado', false)->where('status', 'Completado');
     }
+
+    protected $casts = [
+        'created_at' => 'datetime',
+    ];
 
     public function getActivitylogOptions(): LogOptions
     {

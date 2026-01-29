@@ -10,6 +10,11 @@ class TaxRegime extends Model
 {
     use LogsActivity;
 
+    protected $fillable = [
+        'code',
+        'name',
+    ];
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

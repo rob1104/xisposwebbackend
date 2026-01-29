@@ -108,6 +108,22 @@
     </tr>
 </table>
 
+@php
+    // Intentar leer el nodo con xpath
+    $nodosGlobal = $xml->xpath('//cfdi:InformacionGlobal');
+    $infoGlobal = count($nodosGlobal) > 0 ? $nodosGlobal[0] : null;
+@endphp
+
+@if($infoGlobal)
+    <div class="global-info" style="margin-top: 5px; font-size: 10px; color: #444;">
+        <strong>Factura Global:</strong>
+        {{-- IMPORTANTE: Forzar el cast a (string) asegura que lea el valor del atributo --}}
+        Periodicidad: {{ (string)$infoGlobal['Periodicidad'] }} |
+        Meses: {{ (string)$infoGlobal['Meses'] }} |
+        Año: {{ (string)$infoGlobal['Año'] }}
+    </div>
+@endif
+
 <table class="full-width m-t-10 table-concepts">
     <thead class="bg-slate">
     <tr class="border-indigo">
@@ -142,6 +158,7 @@
     @endforeach
     </tbody>
 </table>
+
 
 <table class="full-width m-t-10">
     <tr>

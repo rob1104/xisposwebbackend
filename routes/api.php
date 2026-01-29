@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CfdiController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CompraController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\FacturaGlobalController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
@@ -68,6 +69,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('ventas', VentaController::class);
     Route::apiResource('cfdis', CfdiController::class);
     Route::apiResource('auditoriainventario', AuditoriaInventarioController::class);
+
+    Route::post('/factura-global', [FacturaGlobalController::class, 'store'])->name('factura-global.store');
+    Route::get('/factura-global/tickets', [FacturaGlobalController::class, 'index'])->name('factura-global.tickets');
 
     Route::prefix('cfdis')->group(function () {
         Route::post('/timbrar', [CfdiController::class, 'timbrar'])->name('cfdis.timbrar');
