@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Categoria;
+use App\Models\ClaveProdServ;
 use App\Models\Impuesto;
 use App\Models\Medida;
 use App\Models\Producto;
@@ -12,6 +13,17 @@ use Illuminate\Http\Request;
 
 class CatalogoController extends Controller
 {
+    // --  CLAVES SAT --
+    public function buscarProductoSat($codigo)
+    {
+        $productoSat = ClaveProdServ::where('clave', $codigo)->first();
+
+        if($productoSat) {
+            return response()->json(['descripcion' => $productoSat->descripcion]);
+        }
+        return response()->json(['descripcion' => null], 404);
+    }
+
     // --- C A T E G O R I A S  ---
     public function getCategorias()
     {

@@ -53,7 +53,7 @@ class Producto extends Model
     public function componentes()
     {
         return $this->belongsToMany(Producto::class, 'producto_composicion', 'producto_padre_id', 'producto_hijo_id')
-            ->withPivot('cantidad') // Extraemos la cantidad del kit
+            ->withPivot('cantidad')
             ->withTimestamps();
     }
 
@@ -87,7 +87,7 @@ class Producto extends Model
             ]
         );
     }
-    
+
     public function stockEnSucursal(mixed $sucursal_id)
     {
         $inventario = DB::table('sucursal_productos')

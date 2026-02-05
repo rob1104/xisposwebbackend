@@ -164,7 +164,9 @@ class PosController extends Controller
         // Buscamos por código de barras o ID
         $producto = Producto::where('codigo_barras', $codigo)
             ->orWhere('id', $codigo)
-            ->with(['precios', 'impuestos'])
+            ->with(['precios', 'impuestos', 'componentes.sucursales' => function($q) use ($sucursalId) {
+                $q->where('sucursal_id', $sucursalId);
+            }])
             ->first();
 
         if (!$producto) {
@@ -173,21 +175,28 @@ class PosController extends Controller
             ], 404);
         }
 
-        $stockData = $producto->sucursales()->where('sucursal_id', $sucursalId)->first();
-        $stockActual = $stockData ? $stockData->pivot->stock_actual : 0;
-        
+        $stockParaVenta = 0;
 
-        // Buscamos el "PRECIO PUBLICO" por defecto para el POS
+        if ($producto->tipo_producto === 'Compuesto') {
+            // Si es compuesto, calculamos para cuántos nos alcanza
+            $stockParaVenta = $this->calcularStockCompuesto($producto, $sucursalId);
+        } else {
+            // Si es normal, tomamos su stock real
+            $stockData = $producto->sucursales()->where('sucursal_id', $sucursalId)->first();
+            $stockParaVenta = $stockData ? $stockData->pivot->stock_actual : 0;
+        }
+
         $precioPublico = $producto->precios->where('nombre_lista', 'PRECIO PUBLICO')->first();
 
         return response()->json([
             'id' => $producto->id,
             'nombre' => $producto->nombre,
             'codigo_barras' => $producto->codigo_barras,
-            'precio' => $precioPublico ? $precioPublico->precio : 0, // Campo usado en el frontend
+            'precio' => $precioPublico ? $precioPublico->precio : 0,
             'impuestos' => $producto->impuestos,
             'status' => $producto->status,
-            'stock_actual' => $stockActual
+            'stock_actual' => $stockParaVenta, // ENVIAMOS EL STOCK VIRTUAL
+            'tipo_producto' => $producto->tipo_producto // Útil para el front
         ]);
     }
 
@@ -197,31 +206,42 @@ class PosController extends Controller
     public function searchByFilter(Request $request)
     {
         $query = $request->get('q');
-
-        if (empty($query)) {
-            return response()->json([]);
-        }
+        if (empty($query)) return response()->json([]);
 
         $turno = CajaTurno::where('user_id', auth()->user()->id)->where('status', 'Abierto')->first();
-
-        if (!$turno) {
-            return response()->json(['message' => 'Debe abrir turno para buscar productos'], 403);
-        }
+        if (!$turno) return response()->json(['message' => 'Debe abrir turno'], 403);
 
         $sucursalId = $turno->sucursale_id;
 
-        $productos = Producto::with(['precios', 'impuestos', 'categoria'])->where(function($q) use ($query) {
-            $q->where('nombre', 'LIKE', "%{$query}%")
-                ->orWhere('codigo_barras', 'LIKE', "%{$query}%");
+        // Cargamos componentes y sus pivotes de sucursal para evitar N+1
+        $productos = Producto::with([
+            'precios',
+            'impuestos',
+            'categoria',
+            'componentes.sucursales' => function($q) use ($sucursalId) {
+                $q->where('sucursal_id', $sucursalId);
+            }
+        ])
+            ->where(function($q) use ($query) {
+                $q->where('nombre', 'LIKE', "%{$query}%")
+                    ->orWhere('codigo_barras', 'LIKE', "%{$query}%");
             })
             ->where('status', 1)
             ->get()
             ->map(function($producto) use ($sucursalId) {
-                $stockSucursal = $producto->sucursales()
-                    ->where('sucursal_id', $sucursalId)
-                    ->first();
 
-                $producto->stock_actual = $stockSucursal ? $stockSucursal->pivot->stock_actual : 0;
+                if ($producto->tipo_producto === 'Compuesto') {
+                    $producto->stock_actual = $this->calcularStockCompuesto($producto, $sucursalId);
+                } else {
+                    $stockSucursal = $producto->sucursales->where('id', $sucursalId)->first(); // Usamos la relacion cargada
+                    // OJO: Si usas relation 'sucursales', el pivot ya viene ahí,
+                    // pero al filtrar con where en colección, buscamos por ID de sucursal
+
+                    // Alternativa segura si la relación no filtró:
+                    $pivot = $producto->sucursales()->where('sucursal_id', $sucursalId)->first();
+                    $producto->stock_actual = $pivot ? $pivot->pivot->stock_actual : 0;
+                }
+
                 return $producto;
             });
 
@@ -320,5 +340,43 @@ class PosController extends Controller
             'movimientos' => $listaMovimientos,
             'denominaciones' => $denominaciones
         ]);
+    }
+
+    /**
+     * Función auxiliar para calcular cuántos kits se pueden armar
+     */
+    private function calcularStockCompuesto($producto, $sucursalId)
+    {
+        if ($producto->componentes->isEmpty()) {
+            return 0;
+        }
+
+        $maximosPosibles = [];
+
+        foreach ($producto->componentes as $hijo) {
+            // Cantidad necesaria para 1 kit
+            $cantidadRequerida = $hijo->pivot->cantidad;
+
+            // Stock actual del hijo en esa sucursal
+            // Buscamos en la relación cargada (eager loading)
+            $sucursalData = $hijo->sucursales->firstWhere('id', $sucursalId);
+
+            // Si no se cargó con eager loading, hacemos consulta de respaldo (seguridad)
+            if (!$sucursalData) {
+                $sucursalData = $hijo->sucursales()->where('sucursal_id', $sucursalId)->first();
+            }
+
+            $stockHijo = $sucursalData ? $sucursalData->pivot->stock_actual : 0;
+
+            if ($cantidadRequerida > 0) {
+                // Cuántos puedo armar con este ingrediente? (Floor para redondear hacia abajo)
+                $maximosPosibles[] = floor($stockHijo / $cantidadRequerida);
+            } else {
+                $maximosPosibles[] = 0;
+            }
+        }
+
+        // El stock del kit es el mínimo denominador común (la cadena se rompe por el eslabón más débil)
+        return empty($maximosPosibles) ? 0 : min($maximosPosibles);
     }
 }

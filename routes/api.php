@@ -163,6 +163,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('medidas/{id}', [CatalogoController::class, 'updateUnidad']);
         Route::delete('medidas/{id}', [CatalogoController::class, 'destroyUnidad']);
 
+        //Claves SAT
+        Route::get('claves-sat/producto/{codigo}', [CatalogoController::class, 'buscarProductoSat']);
+
     });
 
     Route::prefix('pos')->group(function () {

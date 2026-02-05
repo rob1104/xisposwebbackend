@@ -85,10 +85,28 @@ class VentaController extends Controller
 
             foreach ($request->items as $item) {
                 // 1. Cargamos el producto con sus impuestos y sus componentes (hijos)
-                $producto = Producto::with('impuestos')->findOrFail($item['id']);
+                $producto = Producto::with(['impuestos', 'componentes'])->findOrFail($item['id']);
                 $tasaTotal = $producto->impuestos->sum('porcentaje') / 100;
                 $precioFinalConImpuesto = (float)$item['precio'];
                 $cantidad = (float)$item['cantidad'];
+
+                if ($producto->tipo_producto === 'Compuesto') {
+                    foreach ($producto->componentes as $hijo) {
+                        $cantidadRequeridaTotal = $hijo->pivot->cantidad * $cantidad;
+
+                        // Consultar stock actual del hijo
+                        $stockHijo = DB::table('sucursal_productos')
+                            ->where('sucursal_id', $turno->sucursale_id)
+                            ->where('producto_id', $hijo->id)
+                            ->value('stock_actual');
+
+                        if ($stockHijo < $cantidadRequeridaTotal) {
+                            throw new \Exception(
+                                "Stock insuficiente del componente '{$hijo->nombre}' para armar el producto '{$producto->nombre}'."
+                            );
+                        }
+                    }
+                }
 
                 // 2. Cálculos financieros (siempre sobre el producto PADRE para el detalle de venta)
                 $precioBaseUnitario = $precioFinalConImpuesto / (1 + $tasaTotal);
@@ -137,7 +155,7 @@ class VentaController extends Controller
                 }
             }
 
-            // 4. Creación de Cabecera, Detalles y Pagos (Igual que antes)
+            // 4. Creación de Cabecera, Detalles y Pagos
             $venta = Venta::create([
                 'folio' => $folio,
                 'sucursale_id' => $turno->sucursale_id,
