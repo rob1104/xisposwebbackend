@@ -15,6 +15,8 @@ use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\ProductoController;
 use App\Http\Controllers\Api\ProveedorController;
 use App\Http\Controllers\Api\ReportesController;
+use App\Http\Controllers\Api\RestAdminController;
+use App\Http\Controllers\Api\RestauranteController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TransferenciaController;
@@ -202,6 +204,31 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('sucursales/{id}/ticket-config', [TicketController::class, 'show']);
     Route::post('sucursales/{id}/ticket-config', [TicketController::class, 'store']);
+
+    Route::prefix('restaurante')->group(function () {
+        Route::get('meseros', [RestauranteController::class, 'obtenerMeseros']);
+        Route::get('mesas', [RestauranteController::class, 'indexMesas']);
+        Route::post('abrir-orden', [RestauranteController::class, 'abrirOrden']);
+        Route::get('orden/{id}', [RestauranteController::class, 'obtenerOrden']);
+        Route::get('scan/{codigo}', [RestauranteController::class, 'buscarPorCodigo']);
+        Route::post('orden/{id}/actualizar', [RestauranteController::class, 'actualizarOrden']);
+        Route::post('orden/{id}/enviar-cocina', [RestauranteController::class, 'enviarCocina']);
+        Route::post('orden/{id}/cerrar', [RestauranteController::class, 'cerrarCuenta']);
+
+        Route::prefix('/admin')->group(function () {
+            Route::get('/mesas', [RestAdminController::class, 'indexMesas']);
+            Route::post('/mesas', [RestAdminController::class, 'storeMesa']);
+            Route::put('/mesas/{id}', [RestAdminController::class, 'updateMesa']);
+            Route::delete('/mesas/{id}', [RestAdminController::class, 'destroyMesa']);
+
+            Route::get('/categorias', [RestAdminController::class, 'getCategoriasConfig']);
+            Route::put('/categorias/{id}', [RestAdminController::class, 'toggleCategoria']);
+            Route::get('/reportes', [RestAdminController::class, 'getReporteGeneral']);
+        });
+
+    });
+
+
 
 });
 

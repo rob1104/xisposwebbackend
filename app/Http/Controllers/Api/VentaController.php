@@ -8,6 +8,8 @@ use App\Models\Cliente;
 use App\Models\InventarioMovimiento;
 use App\Models\PrecioModificacion;
 use App\Models\Producto;
+use App\Models\RestMesa;
+use App\Models\RestOrden;
 use App\Models\Sucursal;
 use App\Models\Ticket;
 use App\Models\Venta;
@@ -70,6 +72,18 @@ class VentaController extends Controller
 
             $fechaVencimiento = now();
             $clienteId = $request->cliente_id;
+
+            if ($request->origen_restaurante_id) {
+                $ordenRest = RestOrden::find($request->origen_restaurante_id);
+                if ($ordenRest) {
+                    $ordenRest->update(['estatus' => 'Pagada']);
+
+                    // Liberar la mesa
+                    if ($ordenRest->mesa_id) {
+                        RestMesa::where('id', $ordenRest->mesa_id)->update(['ocupada' => false]);
+                    }
+                }
+            }
 
             if ($request->tipo_pago === 'Credito') {
                 // Bloqueamos la fila del cliente para evitar colisiones de saldo

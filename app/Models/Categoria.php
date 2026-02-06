@@ -9,7 +9,9 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Categoria extends Model
 {
     use LogsActivity;
-    protected $fillable = ['nombre', 'descripcion', 'status'];
+    protected $fillable = ['nombre', 'descripcion', 'status',
+        'en_restaurante'
+    ];
 
     public function productos()
     {
