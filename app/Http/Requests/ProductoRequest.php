@@ -25,6 +25,7 @@ class ProductoRequest extends FormRequest
         $productoId = $this->route('producto') ? $this->route('producto')->id : null;
 
         return [
+            'imagen_file' => 'nullable|image|max:10240',
             'status'              => 'required|boolean',
             'nombre'              => 'required|string|max:150',
             'codigo_barras'       => ['required', 'string', 'max:64', Rule::unique('productos')->ignore($productoId)],
@@ -33,7 +34,7 @@ class ProductoRequest extends FormRequest
             'clave_unidad'        => 'required|string',
             'objeto_imp'          => 'required|string|size:2',
             'tipo_producto'       => 'required|in:Inventariable,Compuesto,Servicio',
-            'ultimo_costo_compra' => 'required|numeric|min:0',
+            'ultimo_costo_compra' => 'numeric|min:0',
 
             // Validaciones para relaciones
             'impuestos'           => 'nullable|array',

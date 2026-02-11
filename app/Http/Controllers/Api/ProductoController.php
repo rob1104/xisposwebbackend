@@ -9,6 +9,7 @@ use App\Models\ProductoPrecio;
 use App\Models\Sucursal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class ProductoController extends Controller
 {
@@ -27,9 +28,16 @@ class ProductoController extends Controller
     public function store(ProductoRequest $request)
     {
         return DB::transaction(function () use ($request) {
-            $producto = Producto::create($request->validated() + [
-                    'usuario_creador' => auth()->user()->name
-                ]);
+
+            $data = $request->validated();
+            $data['usuario_creador'] = auth()->user()->name;
+
+            if ($request->hasFile('imagen_file')) {
+                $path = $request->file('imagen_file')->store('productos', 'public');
+                $data['imagen'] = asset(\Storage::url($path));
+            }
+
+            $producto = Producto::create($data);
 
             if ($request->has('impuestos')) {
                 $producto->impuestos()->sync($request->impuestos);
@@ -80,7 +88,7 @@ class ProductoController extends Controller
             foreach ($sucursales as $sucursal) {
                 $producto->sucursales()->attach($sucursal->id, [
                     'stock_actual'   => 0,
-                    'costo_promedio' => $request->ultimo_costo_compra
+                    'costo_promedio' => $request->ultimo_costo_compra || 0
                 ]);
             }
             return response()->json(['message' => 'Producto registrado exitosamente', 'data' => $producto], 201);
@@ -90,10 +98,20 @@ class ProductoController extends Controller
     public function update(ProductoRequest $request, Producto $producto)
     {
         return DB::transaction(function () use ($request, $producto) {
-            $producto->update($request->only([
+            $data = $request->only([
                 'nombre', 'codigo_barras', 'categoria_id', 'tipo_producto',
                 'clave_prod_serv', 'clave_unidad', 'status'
-            ]));
+            ]);
+            if ($request->hasFile('imagen_file')) {
+                if ($producto->imagen) {
+                    $oldPath = str_replace(asset('storage/'), '', $producto->imagen);
+                    \Storage::disk('public')->delete($oldPath);
+                }
+                $path = $request->file('imagen_file')->store('productos', 'public');
+                $data['imagen'] = asset(\Storage::url($path));
+            }
+
+            $producto->update($data);
 
             if ($request->has('impuestos')) {
                 $producto->impuestos()->sync($request->impuestos);
@@ -147,13 +165,12 @@ class ProductoController extends Controller
 
     public function destroy(Producto $producto)
     {
-        // Verificamos si es parte de un kit antes de borrar
         $estaEnKit = DB::table('producto_composicion')->where('producto_hijo_id', $producto->id)->exists();
+        if ($estaEnKit) {
+            return response()->json(['message' => 'No se puede eliminar: es componente de un producto compuesto'], 422);
+        }
 
-        // 1. Validar ventas
         $tieneVentas = $producto->ventas()->exists();
-
-        // 2. Validar movimientos de inventario (Entradas, Salidas, Ajustes)
         $tieneMovimientos = $producto->movimientos()->exists();
 
         if ($tieneVentas || $tieneMovimientos) {
@@ -165,12 +182,12 @@ class ProductoController extends Controller
             ], 422);
         }
 
-        if ($estaEnKit) {
-            return response()->json(['message' => 'No se puede eliminar: es componente de un producto compuesto'], 422);
+        if ($producto->imagen) {
+            $path = str_replace(asset('storage/'), '', $producto->imagen);
+            Storage::disk('public')->delete($path);
         }
-
         $producto->delete();
-        return response()->json(['message' => 'Producto eliminado correctamente']);
+        return response()->json(['message' => 'Producto e imagen eliminados correctamente']);
     }
 
     public function search(Request $request)

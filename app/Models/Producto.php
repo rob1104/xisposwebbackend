@@ -14,7 +14,7 @@ class Producto extends Model
     protected $fillable = [
         'codigo_barras', 'nombre', 'categoria_id',
         'clave_prod_serv', 'clave_unidad', 'objeto_imp', 'tipo_producto',
-        'ultimo_costo_compra', 'usuario_creador', 'status'
+        'ultimo_costo_compra', 'usuario_creador', 'status', 'imagen'
     ];
 
     protected $casts = [

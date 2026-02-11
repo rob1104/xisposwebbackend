@@ -10,6 +10,7 @@ use App\Models\Medida;
 use App\Models\Producto;
 use App\Models\ProductoImpuesto;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class CatalogoController extends Controller
 {
@@ -31,22 +32,70 @@ class CatalogoController extends Controller
     }
 
     public function storeCategoria(Request $request) {
-        $data = $request->validate(['nombre' => 'required|string|max:100', 'descripcion' => 'nullable|string']);
+        $data = $request->validate([
+                'nombre' => 'required|string|max:100',
+                'descripcion' => 'nullable|string',
+                'imagen_file' => 'nullable|image|max:5120'
+            ]);
+
+        if ($request->hasFile('imagen_file')) {
+            $path = $request->file('imagen_file')->store('public/categorias');
+            $data['imagen'] = asset(Storage::url($path));
+        }
+
         return Categoria::create($data + ['status' => 1]);
     }
 
     public function updateCategoria(Request $request, $id) {
         $categoria = Categoria::findOrFail($id);
-        $categoria->update($request->all());
-        return $categoria;
+
+        // 1. Validar los datos
+        $request->validate([
+            'nombre' => 'required|string',
+            'en_restaurante' => 'required',
+            'imagen_file' => 'nullable|image|max:2048' // 2MB Max
+        ]);
+
+        $data = $request->only(['nombre', 'en_restaurante', 'icono']);
+
+        // 2. Procesar la imagen si viene una nueva
+        if ($request->hasFile('imagen_file')) {
+            // Borrar la imagen anterior si existe para ahorrar espacio
+            if ($categoria->imagen) {
+                // Extraemos el nombre del archivo de la URL guardada
+                $oldPath = str_replace('/storage/', '', $categoria->imagen);
+                Storage::disk('public')->delete($oldPath);
+            }
+
+            // Guardar la nueva
+            $path = $request->file('imagen_file')->store('categorias', 'public');
+            $data['imagen'] = asset(Storage::url($path));
+        }
+
+        $categoria->update($data);
+
+        return response()->json($categoria);
     }
 
     public function destroyCategoria($id) {
-        $enUso = Producto::where('categoria_id', $id)->exists();
-        if ($enUso) return response()->json(['error' => 'No se puede eliminar: existen productos asociados.'], 422);
+        $categoria = Categoria::findOrFail($id);
 
-        Categoria::destroy($id);
-        return response()->json(['message' => 'Eliminado']);
+        // 1. Verificación de integridad (igual que antes)
+        $enUso = Producto::where('categoria_id', $id)->exists();
+        if ($enUso) {
+            return response()->json(['error' => 'No se puede eliminar: existen productos asociados.'], 422);
+        }
+
+        // 2. Borrar la imagen del disco si tiene una
+        if ($categoria->imagen) {
+            $path = str_replace('/storage/', '', $categoria->imagen);
+            Storage::disk('public')->delete($path);
+        }
+
+        // 3. Eliminar el registro
+        $categoria->delete();
+
+        return response()->json(['message' => 'Categoría e imagen eliminadas correctamente']);
     }
 
     // --- IMPUESTOS ---

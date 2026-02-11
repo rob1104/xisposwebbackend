@@ -10,7 +10,7 @@ class Categoria extends Model
 {
     use LogsActivity;
     protected $fillable = ['nombre', 'descripcion', 'status',
-        'en_restaurante'
+        'en_restaurante', 'imagen'
     ];
 
     public function productos()
@@ -23,6 +23,6 @@ class Categoria extends Model
         return LogOptions::defaults()
             ->logFillable()
             ->logOnlyDirty()
-            ->useLogName('categorias'); // Categoría del log
+            ->useLogName('categorias');
     }
 }
