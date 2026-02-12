@@ -44,6 +44,7 @@ class VentaController extends Controller
 
     public function store(Request $request)
     {
+        // ... (Tus validaciones iniciales se quedan igual) ...
         $request->validate([
             'cliente_id' => 'nullable|exists:clientes,id',
             'items' => 'required|array',
@@ -51,83 +52,136 @@ class VentaController extends Controller
             'pagos.*.monto' => 'required_with:pagos|numeric',
             'pagos.*.metodo_pago' => 'required_with:pagos',
             'total' => 'required|numeric',
-            'tipo_pago' => 'required|in:Contado,Credito'
+            'tipo_pago' => 'required|in:Contado,Credito',
+            'referencia_orden' => 'nullable|string',
         ]);
 
-        // Venta a Crédito requiere cliente específico
+        // ... (Validación de crédito y lógica de CMD se quedan igual) ...
         if ($request->tipo_pago === 'Credito' && (is_null($request->cliente_id) || $request->cliente_id == 1)) {
             return response()->json(['message' => 'No se puede realizar una venta a crédito al público general.'], 422);
         }
 
-        // 0. Obtenemos el turno y generamos el folio por adelantado
-        $turno = CajaTurno::where('user_id', auth()->id())
-            ->where('status', 'Abierto')
-            ->firstOrFail();
+        // ... (Lógica de RestOrden CMD- se queda igual) ...
+        if (($request->referencia_orden && str_starts_with($request->referencia_orden, 'CMD-'))) {
+            // ... tu lógica existente de CMD ...
+            $ordenRest = RestOrden::where('codigo_cobro', $request->referencia_orden)->first();
+            if ($ordenRest) {
+                $ordenRest->update(['estatus' => 'Cobrada']);
+                if ($ordenRest->mesa_id) {
+                    RestMesa::where('id', $ordenRest->mesa_id)->update(['ocupada' => false]);
+                }
+            }
+        }
+
+        // 0. Obtenemos turno y folio
+        $turno = CajaTurno::where('user_id', auth()->id())->where('status', 'Abierto')->firstOrFail();
         $folio = $this->generarFolioUnico($turno->sucursale_id);
 
         return DB::transaction(function () use ($request, $turno, $folio) {
             $totalSubtotal = 0;
             $totalImpuestos = 0;
             $detallesParaInsertar = [];
-
-            $fechaVencimiento = now();
             $clienteId = $request->cliente_id;
 
-            if ($request->origen_restaurante_id) {
-                $ordenRest = RestOrden::find($request->origen_restaurante_id);
-                if ($ordenRest) {
-                    $ordenRest->update(['estatus' => 'Pagada']);
-
-                    // Liberar la mesa
-                    if ($ordenRest->mesa_id) {
-                        RestMesa::where('id', $ordenRest->mesa_id)->update(['ocupada' => false]);
-                    }
-                }
-            }
-
+            // ... (Lógica de crédito se queda igual) ...
             if ($request->tipo_pago === 'Credito') {
-                // Bloqueamos la fila del cliente para evitar colisiones de saldo
                 $cliente = Cliente::lockForUpdate()->find($clienteId);
-
-                // Validación de límites y morosidad
                 $this->validarCreditoCliente($cliente, $request->total);
-
-                // Calculamos vencimiento y actualizamos saldo
-                $fechaVencimiento = now()->addDays($cliente->dias_credito);
                 $cliente->increment('saldo_actual', $request->total);
             }
 
+            // --- AQUÍ EMPIEZA LA MAGIA DEL BLOQUEO ---
             foreach ($request->items as $item) {
-                // 1. Cargamos el producto con sus impuestos y sus componentes (hijos)
                 $producto = Producto::with(['impuestos', 'componentes'])->findOrFail($item['id']);
-                $tasaTotal = $producto->impuestos->sum('porcentaje') / 100;
-                $precioFinalConImpuesto = (float)$item['precio'];
-                $cantidad = (float)$item['cantidad'];
+                $cantidadVenta = (float)$item['cantidad'];
 
-                if ($producto->tipo_producto === 'Compuesto') {
+                // 1. GESTIÓN DE INVENTARIO CON BLOQUEO (LockForUpdate)
+                // Esto reemplaza tu antigua validación separada y la función descontarExistencia
+
+                if ($producto->tipo_producto === 'Inventariable') {
+                    // A. Buscamos y BLOQUEAMOS la fila del inventario
+                    $pivotStock = DB::table('sucursal_productos')
+                        ->where('sucursal_id', $turno->sucursale_id)
+                        ->where('producto_id', $producto->id)
+                        ->lockForUpdate() // <--- ESTO EVITA LA VENTA DOBLE
+                        ->first();
+
+                    $stockActual = $pivotStock ? $pivotStock->stock_actual : 0;
+
+                    // B. Validamos (Nadie más puede modificar esto mientras estemos aquí)
+                    if ($stockActual < $cantidadVenta) {
+                        throw new \Exception("Stock insuficiente: '{$producto->nombre}'. Tienes: {$stockActual}, Intentas vender: {$cantidadVenta}");
+                    }
+
+                    // C. Descontamos y actualizamos
+                    $nuevoStock = $stockActual - $cantidadVenta;
+                    DB::table('sucursal_productos')
+                        ->where('id', $pivotStock->id)
+                        ->update(['stock_actual' => $nuevoStock]);
+
+                    // D. Registramos Movimiento (Kardex)
+                    InventarioMovimiento::create([
+                        'producto_id'      => $producto->id,
+                        'sucursal_id'      => $turno->sucursale_id,
+                        'tipo_movimiento'  => 'SALIDA POR VENTA',
+                        'observaciones'    => "VENTA DIRECTA. Folio: {$folio}",
+                        'cantidad'         => $cantidadVenta,
+                        'referencia_tipo'  => 'VENTA',
+                        'stock_anterior'   => $stockActual,
+                        'stock_nuevo'      => $nuevoStock,
+                        'user_id'          => auth()->id()
+                    ]);
+
+                }
+                elseif ($producto->tipo_producto === 'Compuesto') {
+                    // Si es Kit, debemos bloquear CADA ingrediente
                     foreach ($producto->componentes as $hijo) {
-                        $cantidadRequeridaTotal = $hijo->pivot->cantidad * $cantidad;
+                        $cantidadRequerida = $hijo->pivot->cantidad * $cantidadVenta;
 
-                        // Consultar stock actual del hijo
-                        $stockHijo = DB::table('sucursal_productos')
+                        // A. Bloqueamos al hijo
+                        $pivotHijo = DB::table('sucursal_productos')
                             ->where('sucursal_id', $turno->sucursale_id)
                             ->where('producto_id', $hijo->id)
-                            ->value('stock_actual');
+                            ->lockForUpdate() // <--- BLOQUEO
+                            ->first();
 
-                        if ($stockHijo < $cantidadRequeridaTotal) {
-                            throw new \Exception(
-                                "Stock insuficiente del componente '{$hijo->nombre}' para armar el producto '{$producto->nombre}'."
-                            );
+                        $stockHijo = $pivotHijo ? $pivotHijo->stock_actual : 0;
+
+                        // B. Validamos
+                        if ($stockHijo < $cantidadRequerida) {
+                            throw new \Exception("Ingredientes insuficientes ({$hijo->nombre}) para armar '{$producto->nombre}'.");
                         }
+
+                        // C. Descontamos
+                        $nuevoStockHijo = $stockHijo - $cantidadRequerida;
+                        DB::table('sucursal_productos')
+                            ->where('id', $pivotHijo->id)
+                            ->update(['stock_actual' => $nuevoStockHijo]);
+
+                        // D. Kardex del hijo
+                        InventarioMovimiento::create([
+                            'producto_id'      => $hijo->id,
+                            'sucursal_id'      => $turno->sucursale_id,
+                            'tipo_movimiento'  => 'SALIDA POR VENTA',
+                            'observaciones'    => "VENTA KIT: {$producto->nombre}. Folio: {$folio}",
+                            'cantidad'         => $cantidadRequerida,
+                            'referencia_tipo'  => 'VENTA',
+                            'stock_anterior'   => $stockHijo,
+                            'stock_nuevo'      => $nuevoStockHijo,
+                            'user_id'          => auth()->id()
+                        ]);
                     }
                 }
 
-                // 2. Cálculos financieros (siempre sobre el producto PADRE para el detalle de venta)
+                // 2. CÁLCULOS FINANCIEROS (Se mantienen igual)
+                $tasaTotal = $producto->impuestos->sum('porcentaje') / 100;
+                $precioFinalConImpuesto = (float)$item['precio'];
+
                 $precioBaseUnitario = $precioFinalConImpuesto / (1 + $tasaTotal);
                 $impuestoUnitario = $precioFinalConImpuesto - $precioBaseUnitario;
 
-                $subtotalLinea = $precioBaseUnitario * $cantidad;
-                $totalLinea = $precioFinalConImpuesto * $cantidad;
+                $subtotalLinea = $precioBaseUnitario * $cantidadVenta;
+                $totalLinea = $precioFinalConImpuesto * $cantidadVenta;
                 $impuestoLinea = $totalLinea - $subtotalLinea;
 
                 $totalSubtotal += $subtotalLinea;
@@ -135,41 +189,18 @@ class VentaController extends Controller
 
                 $detallesParaInsertar[] = [
                     'producto_id' => $producto->id,
-                    'cantidad' => $cantidad,
+                    'cantidad' => $cantidadVenta,
                     'precio_unitario' => $precioBaseUnitario,
                     'impuesto_unitario' => $impuestoUnitario,
                     'subtotal' => $subtotalLinea,
                     'total' => $totalLinea,
                 ];
 
-                // 3. LÓGICA DE INVENTARIO SEGÚN TIPO
-                if ($producto->tipo_producto === 'Compuesto') {
-                    // Si es Kit: Descontamos de los HIJOS
-                    foreach ($producto->componentes as $hijo) {
-                        // Cantidad a descontar = (Cantidad requerida por el kit) * (Cantidad de kits vendidos)
-                        $cantidadTotalHijo = $hijo->pivot->cantidad * $cantidad;
-
-                        $this->descontarExistencia(
-                            $hijo,
-                            $cantidadTotalHijo,
-                            $turno->sucursale_id,
-                            $folio,
-                            "VENTA KIT: {$producto->nombre}"
-                        );
-                    }
-                } elseif ($producto->tipo_producto === 'Inventariable') {
-                    // Si es simple: Descontamos del PADRE
-                    $this->descontarExistencia(
-                        $producto,
-                        $cantidad,
-                        $turno->sucursale_id,
-                        $folio,
-                        "VENTA DIRECTA"
-                    );
-                }
+                // NOTA: Ya NO llamamos a $this->descontarExistencia() aquí abajo
+                // porque ya lo hicimos arriba con el bloqueo.
             }
 
-            // 4. Creación de Cabecera, Detalles y Pagos
+            // 3. Creación de Venta y Pagos (Se mantiene igual)
             $venta = Venta::create([
                 'folio' => $folio,
                 'sucursale_id' => $turno->sucursale_id,

@@ -180,10 +180,22 @@ class RestauranteController extends Controller
     // Metodo para que el POS recupere la orden al escanear
     public function buscarPorCodigo($codigo)
     {
-        $orden = RestOrden::where('codigo_cobro', $codigo)
-            ->where('estatus', '!=', 'Pagada')
-            ->with('detalles.producto')
-            ->firstOrFail();
+
+        $orden = RestOrden::where('codigo_cobro', $codigo)->first();
+
+        if (!$orden) {
+            return response()->json(['message' => 'Código de orden no válido o no existe.'], 404);
+        }
+
+        if ($orden->estatus === 'Cobrada') {
+            return response()->json([
+                'message' => '⚠️ Esta orden YA FUE PAGADA anteriormente.',
+                'error_code' => 'ALREADY_PAID'
+            ], 422);
+        }
+
+
+        $orden->load('detalles.producto');
 
         return response()->json($orden);
     }

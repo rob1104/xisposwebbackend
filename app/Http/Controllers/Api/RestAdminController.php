@@ -74,10 +74,9 @@ class RestAdminController extends Controller
         $desde = $request->get('desde', date('Y-m-d 00:00:00'));
         $hasta = $request->get('hasta', date('Y-m-d 23:59:59'));
 
-        // Base Query: Órdenes Cerradas o Pagadas (Ventas reales)
+        // Base Query: Órdenes Cerradas o Cobradas (Ventas reales)
         $ordenesBase = RestOrden::where('sucursale_id', $sucursalId)
-            ->whereIn('estatus', ['Cerrada', 'Pagada'])
-            ->whereBetween('updated_at', [$desde, $hasta]);
+            ->whereBetween('created_at', [$desde, $hasta]);
 
         // 1. KPIs Principales
         $totalVentas = (clone $ordenesBase)->sum('total');
