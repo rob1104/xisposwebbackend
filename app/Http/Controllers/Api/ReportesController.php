@@ -21,7 +21,7 @@ class ReportesController extends Controller
         // Seguridad: Si no es admin, forzar su sucursal actual
         $sucursal_id = $user->hasRole('Administrador') ? $request->sucursal_id : $user->sucursal_activa_id;
 
-        $ventas = Venta::with(['detalles.producto', 'pagos', 'cliente', 'sucursal'])
+        $ventas = Venta::with(['detalles.producto', 'pagos', 'cliente', 'sucursal', 'user'])
             ->whereBetween('created_at', [$request->fecha_inicio . ' 00:00:00', $request->fecha_fin . ' 23:59:59'])
             ->when($sucursal_id, fn($q) => $q->where('sucursale_id', $sucursal_id))
             ->where('status', 'Completada')

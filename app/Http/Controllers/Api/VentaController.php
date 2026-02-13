@@ -54,6 +54,7 @@ class VentaController extends Controller
             'total' => 'required|numeric',
             'tipo_pago' => 'required|in:Contado,Credito',
             'referencia_orden' => 'nullable|string',
+            'via_venta' => 'nullable|string'
         ]);
 
         // ... (Validación de crédito y lógica de CMD se quedan igual) ...
@@ -210,9 +211,9 @@ class VentaController extends Controller
                 'impuestos' => $totalImpuestos,
                 'total' => $request->total,
                 'tipo_cambio' => $turno->tipo_cambio,
-                'tipo_pago' => $request->tipo_pago,
                 'status' => 'Completada',
-                'cliente_id' => $clienteId
+                'cliente_id' => $clienteId,
+                'via_venta' => $request->via_venta ?? 'MOSTRADOR'
             ]);
 
             $venta->detalles()->createMany($detallesParaInsertar);
@@ -242,7 +243,8 @@ class VentaController extends Controller
                 'configticket' => $configticket,
                 'message' => 'Venta finalizada',
                 'folio' => $venta->folio,
-                'id' => $venta->id
+                'id' => $venta->id,
+                'via_venta' => $venta->via_venta,
             ]);
         });
     }

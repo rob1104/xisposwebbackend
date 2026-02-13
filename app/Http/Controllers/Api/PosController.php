@@ -250,10 +250,24 @@ class PosController extends Controller
 
     public function getUltimoTicket(Request $request)
     {
-        return Venta::where('sucursale_id', $request->user()->sucursal_activa_id)
-                    ->where('user_id', $request->user()->id)
-                    ->with(['detalles', 'cliente', 'detalles.producto','sucursal', 'sucursal.ticket', 'pagos'])
-                    ->latest()->first();
+        // 1. Obtenemos el turno abierto del cajero actual
+        $turno = CajaTurno::where('user_id', auth()->id())
+            ->where('status', 'Abierto')
+            ->first();
+
+        // 2. Si tiene turno, buscamos la última venta asociada a ese turno
+        if ($turno) {
+            return Venta::where('caja_turno_id', $turno->id)
+                ->with(['detalles', 'cliente', 'detalles.producto', 'sucursal', 'sucursal.ticket', 'pagos'])
+                ->latest()
+                ->first();
+        }
+
+        // 3. Fallback: Si no tiene turno (raro), buscamos la última venta histórica de este usuario
+        return Venta::where('user_id', auth()->id())
+            ->with(['detalles', 'cliente', 'detalles.producto', 'sucursal', 'sucursal.ticket', 'pagos'])
+            ->latest()
+            ->first();
     }
 
     public function obtenerSugerenciaApertura(Request $request)

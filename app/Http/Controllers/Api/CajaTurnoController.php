@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CajaTurno;
+use App\Models\Venta;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CajaTurnoController extends Controller
 {
@@ -43,21 +45,51 @@ class CajaTurnoController extends Controller
         $totalEntradas = $turno->movimientos->where('tipo', 'Entrada')->sum('monto');
         $totalRetiros  = $turno->movimientos->where('tipo', 'Retiro')->sum('monto');
 
-        // 4. PREPARAR EL RESUMEN PARA LA VISTA
+        // 4. LISTADO DE VENTAS DEL TURNO
+        $listadoVentas = Venta::with('cliente')
+            ->where('caja_turno_id', $id)
+            ->where('status', 'Completada')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 5. PRODUCTOS VENDIDOS (AGRUPADOS)
+        $productosVendidos = DB::table('venta_detalles')
+            ->join('ventas', 'venta_detalles.venta_id', '=', 'ventas.id')
+            ->join('productos', 'venta_detalles.producto_id', '=', 'productos.id')
+            ->where('ventas.caja_turno_id', $id)
+            ->where('ventas.status', 'Completada')
+            ->select(
+                'productos.nombre',
+                'productos.codigo_barras',
+                DB::raw('SUM(venta_detalles.cantidad) as cantidad_total'),
+                DB::raw('SUM(venta_detalles.total) as dinero_total')
+            )
+            ->groupBy('productos.id', 'productos.nombre', 'productos.codigo_barras')
+            ->orderByDesc('dinero_total')
+            ->get();
+
+        // 6. PREPARAR EL RESUMEN
         $resumen = [
             'ventas_efectivo' => $ventasEfectivo,
             'total_entradas'  => $totalEntradas,
             'total_retiros'   => $totalRetiros
         ];
 
-        // 5. PARSEO DE DENOMINACIONES Y MOVIMIENTOS
+        // 7. PARSEO DE DENOMINACIONES Y MOVIMIENTOS
         $denominaciones = is_string($turno->denominaciones_arqueo)
             ? json_decode($turno->denominaciones_arqueo, true)
             : $turno->denominaciones_arqueo;
         $movimientos = $turno->movimientos;
 
-        // 6. GENERACIÓN DEL PDF
-        $pdf = PDF::loadView('pdf.reporte_turno', compact('turno', 'denominaciones', 'resumen', 'movimientos'));
-        return $pdf->download("Reporte_Turno_{$turno->id}.pdf");
+        // 8. GENERACIÓN DEL PDF
+        $pdf = PDF::loadView('pdf.reporte_turno', compact(
+            'turno',
+            'denominaciones',
+            'resumen',
+            'movimientos',
+            'listadoVentas',
+            'productosVendidos'
+        ));
+        return $pdf->download("Reporte_Corte_Turno_{$turno->id}.pdf");
     }
 }

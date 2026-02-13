@@ -29,7 +29,8 @@ class Venta extends Model
         'efectivo_recibido',
         'cambio_entregado',
         'cfdi_id',
-        'facturado'
+        'facturado',
+        'via_venta'
     ];
 
     public function detalles()
