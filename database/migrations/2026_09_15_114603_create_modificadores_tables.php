@@ -26,12 +26,12 @@ return new class extends Migration
             $table->foreignId('grupo_id')->constrained('modificador_grupos')->onDelete('cascade');
             $table->string('nombre'); // Ej: "Extra Queso", "Mitad Pepperoni"
             $table->decimal('precio_adicional', 14, 6)->default(0);
-            
+
             // Relaciones para heredar recetas/ingredientes
             $table->foreignId('producto_receta_id')->nullable()->constrained('productos')->onDelete('set null')->comment('Si es mitad y mitad, hereda la receta de este producto');
             $table->foreignId('ingrediente_id')->nullable()->constrained('productos')->onDelete('set null')->comment('Si descuenta un ingrediente específico');
             $table->decimal('cantidad_descuento', 12, 3)->default(0)->comment('Cantidad del ingrediente_id a descontar');
-            
+
             $table->boolean('estado')->default(true);
             $table->timestamps();
         });
@@ -44,7 +44,7 @@ return new class extends Migration
         });
 
         Schema::table('venta_detalles', function (Blueprint $table) {
-            $table->json('modificadores_json')->nullable()->after('total');
+            $table->text('modificadores_json')->nullable()->after('total');
         });
     }
 
