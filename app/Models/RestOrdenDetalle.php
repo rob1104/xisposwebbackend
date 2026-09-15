@@ -17,7 +17,13 @@ class RestOrdenDetalle extends Model
         'cantidad',
         'precio',
         'notas',
+        'modificadores_json'
     ];
+    
+    protected $casts = [
+        'modificadores_json' => 'array',
+    ];
+    
     protected $table = 'rest_orden_detalles';
 
     public function producto()

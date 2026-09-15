@@ -16,6 +16,7 @@ class RestOrden extends Model
         'mesero_id',
         'nombre_cliente',
         'estatus',
+        'motivo_cancelacion',
         'total',
         'codigo_cobro',
     ];

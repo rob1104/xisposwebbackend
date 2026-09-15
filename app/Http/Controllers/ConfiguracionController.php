@@ -67,9 +67,23 @@ class ConfiguracionController extends Controller
                 );
             }
 
+            if ($request->has('impresora_general_url')) {
+                Setting::updateOrCreate(
+                    ['clave' => 'impresora_general_url'],
+                    ['valor' => $request->impresora_general_url]
+                );
+            }
+
+            if ($request->has('impresora_cocina_url')) {
+                Setting::updateOrCreate(
+                    ['clave' => 'impresora_cocina_url'],
+                    ['valor' => $request->impresora_cocina_url]
+                );
+            }
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Configuración visual actualizada correctamente'
+                'message' => 'Configuración visual y de impresión actualizada correctamente'
             ]);
         });
     }

@@ -96,4 +96,13 @@ class Producto extends Model
             ->first();
         return $inventario ? (float) $inventario->stock_actual : 0;
     }
+
+    public function modificadores()
+    {
+        return $this->belongsToMany(ModificadorGrupo::class, 'producto_modificadores', 'producto_id', 'grupo_id')
+                    ->where('estado', true)
+                    ->with(['opciones' => function($q) {
+                        $q->where('estado', true);
+                    }]);
+    }
 }

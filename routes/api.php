@@ -214,6 +214,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('orden/{id}/actualizar', [RestauranteController::class, 'actualizarOrden']);
         Route::post('orden/{id}/enviar-cocina', [RestauranteController::class, 'enviarCocina']);
         Route::post('orden/{id}/cerrar', [RestauranteController::class, 'cerrarCuenta']);
+        Route::post('orden/{id}/cancelar', [RestauranteController::class, 'cancelarOrden']);
 
         Route::prefix('/admin')->group(function () {
             Route::get('/mesas', [RestAdminController::class, 'indexMesas']);
@@ -228,7 +229,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     });
 
+    Route::prefix('modificadores')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ModificadorController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\ModificadorController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\ModificadorController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\ModificadorController::class, 'destroy']);
+        Route::post('/{grupoId}/opciones', [\App\Http\Controllers\Api\ModificadorController::class, 'storeOpcion']);
+        Route::put('/opciones/{id}', [\App\Http\Controllers\Api\ModificadorController::class, 'updateOpcion']);
+        Route::delete('/opciones/{id}', [\App\Http\Controllers\Api\ModificadorController::class, 'destroyOpcion']);
+    });
 
+    Route::post('productos/{id}/sync-modificadores', [\App\Http\Controllers\Api\ProductoController::class, 'syncModificadores']);
 
 });
 

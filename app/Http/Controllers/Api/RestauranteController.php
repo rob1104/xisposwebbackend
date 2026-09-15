@@ -113,12 +113,13 @@ class RestauranteController extends Controller
             // 2. REINSERCIÓN: Guardamos el estado actual del carrito "Por Enviar"
             foreach ($request->items as $item) {
                 RestOrdenDetalle::create([
-                    'rest_orden_id' => $orden->id,
-                    'producto_id'   => $item['id'],
-                    'cantidad'      => $item['cantidad'],
-                    'precio'        => $item['precio'],
-                    'notas'         => $item['notas'] ?? null,
-                    'impreso_cocina'=> false
+                    'rest_orden_id'      => $orden->id,
+                    'producto_id'        => $item['id'],
+                    'cantidad'           => $item['cantidad'],
+                    'precio'             => $item['precio'],
+                    'notas'              => $item['notas'] ?? null,
+                    'modificadores_json' => $item['modificadores'] ?? null,
+                    'impreso_cocina'     => false
                 ]);
             }
 
@@ -175,6 +176,35 @@ class RestauranteController extends Controller
 
 
         return response()->json(['codigo' => $codigo]);
+    }
+
+    public function cancelarOrden(Request $request, $id)
+    {
+        $orden = RestOrden::with('detalles')->findOrFail($id);
+
+        if ($orden->estatus !== 'Abierta') {
+            return response()->json(['message' => 'Solo se pueden cancelar órdenes en estado Abierta.'], 422);
+        }
+
+        $enviados = $orden->detalles()->where('impreso_cocina', true)->count();
+        if ($enviados > 0) {
+            return response()->json(['message' => 'No se puede cancelar la orden porque ya hay platillos enviados a cocina.'], 422);
+        }
+
+        $request->validate([
+            'motivo' => 'required|string|max:191'
+        ]);
+
+        if ($orden->mesa_id) {
+            RestMesa::where('id', $orden->mesa_id)->update(['ocupada' => false]);
+        }
+
+        $orden->update([
+            'estatus' => 'Cancelada',
+            'motivo_cancelacion' => $request->motivo
+        ]);
+
+        return response()->json(['message' => 'Orden cancelada exitosamente.']);
     }
 
     // Metodo para que el POS recupere la orden al escanear

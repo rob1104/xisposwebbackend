@@ -15,7 +15,7 @@ class ProductoController extends Controller
 {
     public function index()
     {
-        return Producto::with(['categoria', 'impuestos', 'precios', 'componentes'])
+        return Producto::with(['categoria', 'impuestos', 'precios', 'componentes', 'modificadores'])
             ->get();
     }
 
@@ -225,7 +225,7 @@ class ProductoController extends Controller
             $producto->precios()->create($p);
         }
 
-        // 3. Composición (si es Kit)
+        // 3. Composicin (si es Kit)
         if ($request->tipo_producto === 'Compuesto') {
             foreach ($request->componentes as $c) {
                 $producto->componentes()->create([
@@ -234,5 +234,15 @@ class ProductoController extends Controller
                 ]);
             }
         }
+    }
+
+    public function syncModificadores(Request $request, $id)
+    {
+        $producto = Producto::findOrFail($id);
+        $gruposIds = $request->input('modificador_grupos', []);
+        
+        $producto->modificadores()->sync($gruposIds);
+        
+        return response()->json(['message' => 'Modificadores actualizados']);
     }
 }

@@ -30,7 +30,8 @@ class Venta extends Model
         'cambio_entregado',
         'cfdi_id',
         'facturado',
-        'via_venta'
+        'via_venta',
+        'uuid'
     ];
 
     public function detalles()

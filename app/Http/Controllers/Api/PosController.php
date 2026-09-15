@@ -164,7 +164,7 @@ class PosController extends Controller
         // Buscamos por código de barras o ID
         $producto = Producto::where('codigo_barras', $codigo)
             ->orWhere('id', $codigo)
-            ->with(['precios', 'impuestos', 'componentes.sucursales' => function($q) use ($sucursalId) {
+            ->with(['precios', 'impuestos', 'modificadores', 'componentes.sucursales' => function($q) use ($sucursalId) {
                 $q->where('sucursal_id', $sucursalId);
             }])
             ->first();
@@ -196,7 +196,8 @@ class PosController extends Controller
             'impuestos' => $producto->impuestos,
             'status' => $producto->status,
             'stock_actual' => $stockParaVenta, // ENVIAMOS EL STOCK VIRTUAL
-            'tipo_producto' => $producto->tipo_producto // Útil para el front
+            'tipo_producto' => $producto->tipo_producto, // Útil para el front
+            'modificadores' => $producto->modificadores
         ]);
     }
 
@@ -218,6 +219,7 @@ class PosController extends Controller
             'precios',
             'impuestos',
             'categoria',
+            'modificadores',
             'componentes.sucursales' => function($q) use ($sucursalId) {
                 $q->where('sucursal_id', $sucursalId);
             }

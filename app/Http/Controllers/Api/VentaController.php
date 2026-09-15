@@ -54,7 +54,7 @@ class VentaController extends Controller
             'total' => 'required|numeric',
             'tipo_pago' => 'required|in:Contado,Credito',
             'referencia_orden' => 'nullable|string',
-            'via_venta' => 'nullable|string'
+            'via_venta' => 'nullable|string',
         ]);
 
         // ... (Validación de crédito y lógica de CMD se quedan igual) ...
@@ -138,39 +138,39 @@ class VentaController extends Controller
                     // Si es Kit, debemos bloquear CADA ingrediente
                     foreach ($producto->componentes as $hijo) {
                         $cantidadRequerida = $hijo->pivot->cantidad * $cantidadVenta;
+                        $this->deducirHijoBloqueando($hijo, $cantidadRequerida, $turno->sucursale_id, $folio, "VENTA KIT: {$producto->nombre}");
+                    }
+                }
 
-                        // A. Bloqueamos al hijo
-                        $pivotHijo = DB::table('sucursal_productos')
-                            ->where('sucursal_id', $turno->sucursale_id)
-                            ->where('producto_id', $hijo->id)
-                            ->lockForUpdate() // <--- BLOQUEO
-                            ->first();
+                // NUEVO: Lógica de Modificadores (Inventario)
+                $modificadoresJson = null;
+                if (isset($item['modificadores']) && is_array($item['modificadores'])) {
+                    $modificadoresJson = json_encode($item['modificadores']);
+                    foreach ($item['modificadores'] as $modOp) {
+                        $opcion = \App\Models\ModificadorOpcion::with('grupo')->find($modOp['id']);
+                        if (!$opcion) continue;
 
-                        $stockHijo = $pivotHijo ? $pivotHijo->stock_actual : 0;
-
-                        // B. Validamos
-                        if ($stockHijo < $cantidadRequerida) {
-                            throw new \Exception("Ingredientes insuficientes ({$hijo->nombre}) para armar '{$producto->nombre}'.");
+                        $isMitad = ($opcion->grupo->tipo === 'mitad_y_mitad');
+                        $multiplicadorReceta = $isMitad ? 0.5 : 1.0;
+                        
+                        // A. Descuento de Receta Asociada (Ej. Mitad Peperoni -> receta de Pizza Peperoni / 2)
+                        if ($opcion->producto_receta_id) {
+                            $receta = Producto::with('componentes')->find($opcion->producto_receta_id);
+                            if ($receta && $receta->tipo_producto === 'Compuesto') {
+                                foreach ($receta->componentes as $hijo) {
+                                    $cantidadReq = $hijo->pivot->cantidad * $cantidadVenta * $multiplicadorReceta;
+                                    $this->deducirHijoBloqueando($hijo, $cantidadReq, $turno->sucursale_id, $folio, "Modificador: {$opcion->nombre}");
+                                }
+                            }
                         }
-
-                        // C. Descontamos
-                        $nuevoStockHijo = $stockHijo - $cantidadRequerida;
-                        DB::table('sucursal_productos')
-                            ->where('id', $pivotHijo->id)
-                            ->update(['stock_actual' => $nuevoStockHijo]);
-
-                        // D. Kardex del hijo
-                        InventarioMovimiento::create([
-                            'producto_id'      => $hijo->id,
-                            'sucursal_id'      => $turno->sucursale_id,
-                            'tipo_movimiento'  => 'SALIDA POR VENTA',
-                            'observaciones'    => "VENTA KIT: {$producto->nombre}. Folio: {$folio}",
-                            'cantidad'         => $cantidadRequerida,
-                            'referencia_tipo'  => 'VENTA',
-                            'stock_anterior'   => $stockHijo,
-                            'stock_nuevo'      => $nuevoStockHijo,
-                            'user_id'          => auth()->id()
-                        ]);
+                        // B. Descuento de Ingrediente Directo (Ej. Extra Queso)
+                        if ($opcion->ingrediente_id && $opcion->cantidad_descuento > 0) {
+                            $ing = Producto::find($opcion->ingrediente_id);
+                            if ($ing) {
+                                $cantidadReq = $opcion->cantidad_descuento * $cantidadVenta;
+                                $this->deducirHijoBloqueando($ing, $cantidadReq, $turno->sucursale_id, $folio, "Modificador Directo: {$opcion->nombre}");
+                            }
+                        }
                     }
                 }
 
@@ -195,13 +195,12 @@ class VentaController extends Controller
                     'impuesto_unitario' => $impuestoUnitario,
                     'subtotal' => $subtotalLinea,
                     'total' => $totalLinea,
+                    'modificadores_json' => $modificadoresJson,
                 ];
-
-                // NOTA: Ya NO llamamos a $this->descontarExistencia() aquí abajo
-                // porque ya lo hicimos arriba con el bloqueo.
             }
 
-            // 3. Creación de Venta y Pagos (Se mantiene igual)
+            // 3. Creación de Venta y Pagos
+            $uuidVenta = (string)Str::uuid();
             $venta = Venta::create([
                 'folio' => $folio,
                 'sucursale_id' => $turno->sucursale_id,
@@ -212,6 +211,7 @@ class VentaController extends Controller
                 'total' => $request->total,
                 'tipo_cambio' => $turno->tipo_cambio,
                 'status' => 'Completada',
+                'uuid' => $uuidVenta,
                 'cliente_id' => $clienteId,
                 'via_venta' => $request->via_venta ?? 'MOSTRADOR'
             ]);
@@ -238,6 +238,15 @@ class VentaController extends Controller
             $configticket = Ticket::where('sucursale_id', $venta->sucursale_id)->first();
             $venta->load('cliente');
 
+            $qrData = json_encode([
+                'u' => $uuidVenta,
+                'f' => $venta->id,
+                's' => $turno->sucursale_id,
+                'c' => auth()->id(),
+                'l' => $request->cliente_id ?? 0,
+                't' => (float) $venta->total
+            ]);
+
             return response()->json([
                 'cliente' => $venta->cliente,
                 'configticket' => $configticket,
@@ -245,6 +254,7 @@ class VentaController extends Controller
                 'folio' => $venta->folio,
                 'id' => $venta->id,
                 'via_venta' => $venta->via_venta,
+                'qr_data' => $qrData
             ]);
         });
     }
@@ -254,38 +264,53 @@ class VentaController extends Controller
         $request->validate(['motivo' => 'required|string|min:5']);
 
         return DB::transaction(function () use ($request, $id) {
-            $venta = Venta::with('detalles')->findOrFail($id);
+            $venta = Venta::with(['detalles.producto.componentes'])->findOrFail($id);
 
             if ($venta->status === 'Cancelada') {
                 return response()->json(['error' => 'Esta venta ya fue anulada anteriormente.'], 422);
             }
 
             foreach ($venta->detalles as $detalle) {
-                // Obtenemos stock actual de la sucursal donde se vendió
-                $stockPivot = DB::table('sucursal_productos')
-                    ->where('producto_id', $detalle->producto_id)
-                    ->where('sucursal_id', $venta->sucursale_id)
-                    ->first();
+                $producto = $detalle->producto;
 
-                if ($stockPivot) {
-                    $nuevoStock = $stockPivot->stock_actual + $detalle->cantidad;
+                if ($producto->tipo_producto === 'Inventariable') {
+                    $this->restaurarHijoBloqueando($producto, $detalle->cantidad, $venta->sucursale_id, $venta->folio, "Cancelación de venta");
+                } elseif ($producto->tipo_producto === 'Compuesto') {
+                    foreach ($producto->componentes as $hijo) {
+                        $cantidadRequerida = $hijo->pivot->cantidad * $detalle->cantidad;
+                        $this->restaurarHijoBloqueando($hijo, $cantidadRequerida, $venta->sucursale_id, $venta->folio, "Devolución KIT: {$producto->nombre}");
+                    }
+                }
 
-                    // Revertimos stock
-                    DB::table('sucursal_productos')
-                        ->where('id', $stockPivot->id)
-                        ->update(['stock_actual' => $nuevoStock]);
+                if ($detalle->modificadores_json) {
+                    $modificadores = json_decode($detalle->modificadores_json, true);
+                    if (is_array($modificadores)) {
+                        foreach ($modificadores as $modOp) {
+                            $opcion = \App\Models\ModificadorOpcion::with('grupo')->find($modOp['id']);
+                            if (!$opcion) continue;
 
-                    // REGISTRO DE MOVIMIENTO: ENTRADA POR CANCELACIÓN
-                    InventarioMovimiento::create([
-                        'producto_id'  => $detalle->producto_id,
-                        'sucursal_id' => $venta->sucursale_id,
-                        'tipo_movimiento'         => 'ENTRADA (CANCELACION DE VENTA)',
-                        'observaciones'       => "Cancelación de compra folio: " . $venta->folio,
-                        'cantidad'     => $detalle->cantidad,
-                        'stock_anterior'  => $stockPivot->stock_actual,
-                        'stock_nuevo'  => $nuevoStock,
-                        'user_id'      => auth()->id()
-                    ]);
+                            $isMitad = ($opcion->grupo->tipo === 'mitad_y_mitad');
+                            $multiplicadorReceta = $isMitad ? 0.5 : 1.0;
+
+                            if ($opcion->producto_receta_id) {
+                                $receta = Producto::with('componentes')->find($opcion->producto_receta_id);
+                                if ($receta && $receta->tipo_producto === 'Compuesto') {
+                                    foreach ($receta->componentes as $hijo) {
+                                        $cantidadReq = $hijo->pivot->cantidad * $detalle->cantidad * $multiplicadorReceta;
+                                        $this->restaurarHijoBloqueando($hijo, $cantidadReq, $venta->sucursale_id, $venta->folio, "Devolución Modificador: {$opcion->nombre}");
+                                    }
+                                }
+                            }
+
+                            if ($opcion->ingrediente_id && $opcion->cantidad_descuento > 0) {
+                                $ing = Producto::find($opcion->ingrediente_id);
+                                if ($ing) {
+                                    $cantidadReq = $opcion->cantidad_descuento * $detalle->cantidad;
+                                    $this->restaurarHijoBloqueando($ing, $cantidadReq, $venta->sucursale_id, $venta->folio, "Devolución Modificador Directo: {$opcion->nombre}");
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -381,34 +406,63 @@ class VentaController extends Controller
         }
     }
 
-    /**
-     * Procesa el descuento físico y genera el movimiento de inventario.
-     */
-    private function descontarExistencia($producto, $cantidad, $sucursalId, $folio, $observacionExtra)
+
+
+    private function deducirHijoBloqueando($hijo, $cantidadRequerida, $sucursalId, $folio, $observacion)
     {
-        $stockSucursal = $producto->sucursales()
+        $pivotHijo = DB::table('sucursal_productos')
+            ->where('sucursal_id', $sucursalId)
+            ->where('producto_id', $hijo->id)
+            ->lockForUpdate()
+            ->first();
+
+        $stockHijo = $pivotHijo ? $pivotHijo->stock_actual : 0;
+
+        if ($stockHijo < $cantidadRequerida) {
+            throw new \Exception("Stock insuficiente de ingrediente ({$hijo->nombre}) para $observacion. Stock: $stockHijo, Requerido: $cantidadRequerida");
+        }
+
+        $nuevoStockHijo = $stockHijo - $cantidadRequerida;
+        DB::table('sucursal_productos')
+            ->where('id', $pivotHijo->id)
+            ->update(['stock_actual' => $nuevoStockHijo]);
+
+        InventarioMovimiento::create([
+            'producto_id'      => $hijo->id,
+            'sucursal_id'      => $sucursalId,
+            'tipo_movimiento'  => 'SALIDA POR VENTA',
+            'observaciones'    => "{$observacion}. Folio: {$folio}",
+            'cantidad'         => $cantidadRequerida,
+            'referencia_tipo'  => 'VENTA',
+            'stock_anterior'   => $stockHijo,
+            'stock_nuevo'      => $nuevoStockHijo,
+            'user_id'          => auth()->id()
+        ]);
+    }
+
+    private function restaurarHijoBloqueando($hijo, $cantidadRequerida, $sucursalId, $folio, $observacion)
+    {
+        $stockPivotHijo = DB::table('sucursal_productos')
+            ->where('producto_id', $hijo->id)
             ->where('sucursal_id', $sucursalId)
             ->first();
 
-        if ($stockSucursal) {
-            $nuevoStock = $stockSucursal->pivot->stock_actual - $cantidad;
+        if ($stockPivotHijo) {
+            $nuevoStock = $stockPivotHijo->stock_actual + $cantidadRequerida;
+            DB::table('sucursal_productos')
+                ->where('id', $stockPivotHijo->id)
+                ->update(['stock_actual' => $nuevoStock]);
 
-            // Actualizamos tabla pivot de existencia
-            $producto->sucursales()->updateExistingPivot($sucursalId, [
-                'stock_actual' => $nuevoStock
-            ]);
-
-            // REGISTRAMOS EL MOVIMIENTO (Kardex)
             InventarioMovimiento::create([
-                'producto_id'      => $producto->id,
-                'sucursal_id'      => $sucursalId,
-                'tipo_movimiento'  => 'SALIDA POR VENTA',
-                'observaciones'    => "{$observacionExtra}. Folio: {$folio}",
-                'cantidad'         => $cantidad,
-                'referencia_tipo'  => 'VENTA',
-                'stock_anterior'   => $stockSucursal->pivot->stock_actual,
-                'stock_nuevo'      => $nuevoStock,
-                'user_id'          => auth()->id()
+                'producto_id'  => $hijo->id,
+                'sucursal_id' => $sucursalId,
+                'tipo_movimiento' => 'ENTRADA (CANCELACION DE VENTA)',
+                'observaciones' => "{$observacion} Folio: {$folio}",
+                'cantidad' => $cantidadRequerida,
+                'referencia_tipo' => 'CANCELACION',
+                'stock_anterior' => $stockPivotHijo->stock_actual,
+                'stock_nuevo' => $nuevoStock,
+                'user_id' => auth()->id()
             ]);
         }
     }
