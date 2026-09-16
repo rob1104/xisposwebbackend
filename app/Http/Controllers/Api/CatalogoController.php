@@ -52,11 +52,12 @@ class CatalogoController extends Controller
         // 1. Validar los datos
         $request->validate([
             'nombre' => 'required|string',
+            'descripcion' => 'nullable|string',
             'en_restaurante' => 'required',
             'imagen_file' => 'nullable|image|max:2048' // 2MB Max
         ]);
 
-        $data = $request->only(['nombre', 'en_restaurante', 'icono']);
+        $data = $request->only(['nombre', 'descripcion', 'en_restaurante', 'icono']);
 
         // 2. Procesar la imagen si viene una nueva
         if ($request->hasFile('imagen_file')) {
