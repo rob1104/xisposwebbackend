@@ -359,40 +359,47 @@ class PosController extends Controller
     }
 
     /**
-     * Función auxiliar para calcular cuántos kits se pueden armar
+     * Función auxiliar para calcular cuántos kits se pueden armar (recursiva)
      */
     private function calcularStockCompuesto($producto, $sucursalId)
     {
+        // Load componentes if not loaded
+        $producto->loadMissing('componentes');
+        
         if ($producto->componentes->isEmpty()) {
-            return 0;
+            return 0; // O si prefieres, podrías retornar 0 o un valor alto si es un servicio, pero como es kit, si no tiene nada es 0.
         }
 
         $maximosPosibles = [];
 
         foreach ($producto->componentes as $hijo) {
-            // Cantidad necesaria para 1 kit
+            // Cantidad necesaria para 1 kit (o para 1 sub-kit)
             $cantidadRequerida = $hijo->pivot->cantidad;
 
-            // Stock actual del hijo en esa sucursal
-            // Buscamos en la relación cargada (eager loading)
-            $sucursalData = $hijo->sucursales->firstWhere('id', $sucursalId);
-
-            // Si no se cargó con eager loading, hacemos consulta de respaldo (seguridad)
-            if (!$sucursalData) {
-                $sucursalData = $hijo->sucursales()->where('sucursal_id', $sucursalId)->first();
+            if ($cantidadRequerida <= 0) {
+                $maximosPosibles[] = 0;
+                continue;
             }
 
-            $stockHijo = $sucursalData ? $sucursalData->pivot->stock_actual : 0;
-
-            if ($cantidadRequerida > 0) {
-                // Cuántos puedo armar con este ingrediente? (Floor para redondear hacia abajo)
+            if ($hijo->tipo_producto === 'Inventariable') {
+                $sucursalData = $hijo->sucursales->firstWhere('id', $sucursalId);
+                if (!$sucursalData) {
+                    $sucursalData = $hijo->sucursales()->where('sucursal_id', $sucursalId)->first();
+                }
+                $stockHijo = $sucursalData ? $sucursalData->pivot->stock_actual : 0;
+                
                 $maximosPosibles[] = floor($stockHijo / $cantidadRequerida);
+            } elseif ($hijo->tipo_producto === 'Compuesto') {
+                $stockHijoVirtual = $this->calcularStockCompuesto($hijo, $sucursalId);
+                $maximosPosibles[] = floor($stockHijoVirtual / $cantidadRequerida);
             } else {
-                $maximosPosibles[] = 0;
+                // Si es un servicio, asumimos que tiene stock infinito, pero si se requiere contar no afecta el maximo
+                // Así que podemos ignorarlo o poner un número gigante
+                $maximosPosibles[] = PHP_INT_MAX;
             }
         }
 
-        // El stock del kit es el mínimo denominador común (la cadena se rompe por el eslabón más débil)
+        // El stock del kit es el mínimo denominador común
         return empty($maximosPosibles) ? 0 : min($maximosPosibles);
     }
 }
