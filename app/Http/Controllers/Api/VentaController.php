@@ -135,11 +135,8 @@ class VentaController extends Controller
 
                 }
                 elseif ($producto->tipo_producto === 'Compuesto') {
-                    // Si es Kit, debemos bloquear CADA ingrediente
-                    foreach ($producto->componentes as $hijo) {
-                        $cantidadRequerida = $hijo->pivot->cantidad * $cantidadVenta;
-                        $this->deducirHijoBloqueando($hijo, $cantidadRequerida, $turno->sucursale_id, $folio, "VENTA KIT: {$producto->nombre}");
-                    }
+                    // Si es Kit, debemos bloquear CADA ingrediente, permitiendo kits dentro de kits
+                    $this->deducirKitRecursivo($producto, $cantidadVenta, $turno->sucursale_id, $folio, "VENTA KIT: {$producto->nombre}");
                 }
 
                 // NUEVO: Lógica de Modificadores (Inventario)
@@ -157,10 +154,7 @@ class VentaController extends Controller
                         if ($opcion->producto_receta_id) {
                             $receta = Producto::with('componentes')->find($opcion->producto_receta_id);
                             if ($receta && $receta->tipo_producto === 'Compuesto') {
-                                foreach ($receta->componentes as $hijo) {
-                                    $cantidadReq = $hijo->pivot->cantidad * $cantidadVenta * $multiplicadorReceta;
-                                    $this->deducirHijoBloqueando($hijo, $cantidadReq, $turno->sucursale_id, $folio, "Modificador: {$opcion->nombre}");
-                                }
+                                $this->deducirKitRecursivo($receta, $cantidadVenta * $multiplicadorReceta, $turno->sucursale_id, $folio, "Modificador: {$opcion->nombre}");
                             }
                         }
                         // B. Descuento de Ingrediente Directo (Ej. Extra Queso)
@@ -276,10 +270,7 @@ class VentaController extends Controller
                 if ($producto->tipo_producto === 'Inventariable') {
                     $this->restaurarHijoBloqueando($producto, $detalle->cantidad, $venta->sucursale_id, $venta->folio, "Cancelación de venta");
                 } elseif ($producto->tipo_producto === 'Compuesto') {
-                    foreach ($producto->componentes as $hijo) {
-                        $cantidadRequerida = $hijo->pivot->cantidad * $detalle->cantidad;
-                        $this->restaurarHijoBloqueando($hijo, $cantidadRequerida, $venta->sucursale_id, $venta->folio, "Devolución KIT: {$producto->nombre}");
-                    }
+                    $this->restaurarKitRecursivo($producto, $detalle->cantidad, $venta->sucursale_id, $venta->folio, "Devolución KIT: {$producto->nombre}");
                 }
 
                 if ($detalle->modificadores_json) {
@@ -295,10 +286,7 @@ class VentaController extends Controller
                             if ($opcion->producto_receta_id) {
                                 $receta = Producto::with('componentes')->find($opcion->producto_receta_id);
                                 if ($receta && $receta->tipo_producto === 'Compuesto') {
-                                    foreach ($receta->componentes as $hijo) {
-                                        $cantidadReq = $hijo->pivot->cantidad * $detalle->cantidad * $multiplicadorReceta;
-                                        $this->restaurarHijoBloqueando($hijo, $cantidadReq, $venta->sucursale_id, $venta->folio, "Devolución Modificador: {$opcion->nombre}");
-                                    }
+                                    $this->restaurarKitRecursivo($receta, $detalle->cantidad * $multiplicadorReceta, $venta->sucursale_id, $venta->folio, "Devolución Modificador: {$opcion->nombre}");
                                 }
                             }
 
@@ -408,6 +396,20 @@ class VentaController extends Controller
 
 
 
+    private function deducirKitRecursivo($producto, $cantidadTotal, $sucursalId, $folio, $observacionBase)
+    {
+        if ($producto->tipo_producto === 'Inventariable') {
+            $this->deducirHijoBloqueando($producto, $cantidadTotal, $sucursalId, $folio, $observacionBase);
+        } elseif ($producto->tipo_producto === 'Compuesto') {
+            // Load componentes if not loaded
+            $producto->loadMissing('componentes');
+            foreach ($producto->componentes as $hijo) {
+                $cantidadReq = $hijo->pivot->cantidad * $cantidadTotal;
+                $this->deducirKitRecursivo($hijo, $cantidadReq, $sucursalId, $folio, "{$observacionBase} -> {$hijo->nombre}");
+            }
+        }
+    }
+
     private function deducirHijoBloqueando($hijo, $cantidadRequerida, $sucursalId, $folio, $observacion)
     {
         $pivotHijo = DB::table('sucursal_productos')
@@ -438,6 +440,20 @@ class VentaController extends Controller
             'stock_nuevo'      => $nuevoStockHijo,
             'user_id'          => auth()->id()
         ]);
+    }
+
+    private function restaurarKitRecursivo($producto, $cantidadTotal, $sucursalId, $folio, $observacionBase)
+    {
+        if ($producto->tipo_producto === 'Inventariable') {
+            $this->restaurarHijoBloqueando($producto, $cantidadTotal, $sucursalId, $folio, $observacionBase);
+        } elseif ($producto->tipo_producto === 'Compuesto') {
+            // Load componentes if not loaded
+            $producto->loadMissing('componentes');
+            foreach ($producto->componentes as $hijo) {
+                $cantidadReq = $hijo->pivot->cantidad * $cantidadTotal;
+                $this->restaurarKitRecursivo($hijo, $cantidadReq, $sucursalId, $folio, "{$observacionBase} -> {$hijo->nombre}");
+            }
+        }
     }
 
     private function restaurarHijoBloqueando($hijo, $cantidadRequerida, $sucursalId, $folio, $observacion)

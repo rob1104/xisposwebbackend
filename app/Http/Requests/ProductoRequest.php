@@ -60,14 +60,27 @@ class ProductoRequest extends FormRequest
             'componentes.*.id' => [
                 'required',
                 'exists:productos,id',
-                function ($attribute, $value, $fail) {
-                    // Verificamos el tipo del producto hijo
-                    $hijo = \App\Models\Producto::find($value);
-                    if ($hijo && $hijo->tipo_producto === 'Compuesto') {
-                        $fail('No se permiten anidamiento de kits: Un componente no puede ser otro producto compuesto.');
+                function ($attribute, $value, $fail) use ($productoId) {
+                    if (!$productoId) return; // Si es creacion nueva, no hay ciclo posible aun
+                    
+                    // Verificamos ciclos para no hacer loops infinitos
+                    $verificarCiclo = function($hijoId, $buscadoId) use (&$verificarCiclo) {
+                        if ($hijoId == $buscadoId) return true;
+                        $nietos = \Illuminate\Support\Facades\DB::table('producto_composicion')
+                            ->where('producto_padre_id', $hijoId)
+                            ->pluck('producto_hijo_id');
+                        foreach ($nietos as $n) {
+                            if ($verificarCiclo($n, $buscadoId)) return true;
+                        }
+                        return false;
+                    };
+                    
+                    if ($verificarCiclo($value, $productoId)) {
+                        $fail('No se permite agregar este componente porque genera un ciclo infinito (el componente ya te contiene directa o indirectamente).');
                     }
-                },
-            'componentes.*.cantidad' => 'numeric']
+                }
+            ],
+            'componentes.*.cantidad' => 'numeric'
         ];
     }
 }
