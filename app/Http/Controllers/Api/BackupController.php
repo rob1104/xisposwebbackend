@@ -26,7 +26,7 @@ class BackupController extends Controller implements HasMiddleware
         return response()->json($backups);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, \App\Services\BackupService $backupService)
     {
         $running = DatabaseBackup::where('status', 'running')->exists();
         if ($running) {
@@ -35,13 +35,16 @@ class BackupController extends Controller implements HasMiddleware
 
         $backup = DatabaseBackup::create([
             'user_id' => $request->user()->id,
-            'status' => 'pending',
+            'status' => 'running',
             'disk' => 'local',
         ]);
 
-        CreateDatabaseBackupJob::dispatch($backup);
-
-        return response()->json(['message' => 'Respaldo iniciado', 'backup' => $backup], 201);
+        try {
+            $backupService->executeBackup($backup);
+            return response()->json(['message' => 'Respaldo completado con éxito', 'backup' => $backup->fresh()], 201);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al ejecutar el respaldo: ' . $e->getMessage()], 500);
+        }
     }
 
     public function show($id)
