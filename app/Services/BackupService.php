@@ -4,8 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
+use Spatie\DbDumper\Databases\MySql;
 use App\Models\DatabaseBackup;
 use Exception;
 
@@ -33,21 +32,6 @@ class BackupService
         }
     }
 
-    protected function findDumpCommand($driver): string
-    {
-        if ($driver === 'mariadb') {
-            $process = new Process(['mariadb-dump', '--version']);
-            $process->run();
-            if ($process->isSuccessful()) return 'mariadb-dump';
-        }
-
-        $process = new Process(['mysqldump', '--version']);
-        $process->run();
-        if ($process->isSuccessful()) return 'mysqldump';
-
-        return 'mysqldump';
-    }
-
     public function executeBackup(DatabaseBackup $backup): void
     {
         try {
@@ -72,53 +56,42 @@ class BackupService
                 'database_version' => $version,
             ]);
 
-            $dumpCommand = $this->findDumpCommand($driver);
             $tempSqlFile = storage_path('app/private/temp_backup_' . $backup->id . '.sql');
 
-            $args = [
-                $dumpCommand,
-                '--user=' . $dbUser,
-                '--host=' . $dbHost,
-                '--port=' . $dbPort,
-                '--routines',
-                '--triggers',
-            ];
+            // Utilizando Spatie DbDumper que es robusto y probado
+            $dumper = MySql::create()
+                ->setDbName($dbName)
+                ->setUserName($dbUser)
+                ->setPassword($dbPass)
+                ->setHost($dbHost)
+                ->setPort($dbPort)
+                ->doNotUseColumnStatistics()
+                ->addExtraOption('--routines')
+                ->addExtraOption('--triggers');
 
-            if ($dumpCommand === 'mysqldump') {
-                $args[] = '--column-statistics=0';
-            }
-
-            $args[] = $dbName;
-            $args[] = '--result-file=' . $tempSqlFile;
-
-            // Secure way to pass password without showing in process list
-            $env = array_merge($_SERVER, $_ENV);
-            $env['MYSQL_PWD'] = $dbPass;
-
-            $process = new Process($args, null, $env);
-            $process->setTimeout(3600); // 1 hour timeout
-            $process->run();
-
-            if (!$process->isSuccessful()) {
-                if (strpos($process->getErrorOutput(), 'Unknown variable') !== false && strpos($process->getErrorOutput(), 'column-statistics') !== false) {
-                    $args = array_filter($args, fn($a) => $a !== '--column-statistics=0');
-                    $process = new Process($args, null, $env);
-                    $process->setTimeout(3600);
-                    $process->run();
-                    if (!$process->isSuccessful()) {
-                        throw new ProcessFailedException($process);
+            // Si falla encontrando el binario en Windows con XAMPP, intentamos decirle dónde podría estar
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                $possiblePaths = [
+                    'D:\\xampp82\\mysql\\bin',
+                    'C:\\xampp\\mysql\\bin',
+                    'D:\\xampp\\mysql\\bin',
+                ];
+                foreach ($possiblePaths as $path) {
+                    if (file_exists($path . '\\mysqldump.exe') || file_exists($path . '\\mariadb-dump.exe')) {
+                        $dumper->setDumpBinaryPath($path);
+                        break;
                     }
-                } else {
-                    throw new ProcessFailedException($process);
                 }
             }
+
+            $dumper->dumpToFile($tempSqlFile);
 
             $filename = 'backup_' . date('Y_m_d_His') . '.sql.gz';
             $path = 'private/backups/' . $filename;
             
             Storage::disk('local')->makeDirectory('private/backups');
             
-            // Generate GZ
+            // Generar GZ directamente en PHP
             $source = fopen($tempSqlFile, 'rb');
             $dest = Storage::disk('local')->path($path);
             $destStream = fopen($dest, 'wb');
