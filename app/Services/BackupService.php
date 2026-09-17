@@ -114,19 +114,21 @@ class BackupService
                 }
             }
 
-            $filename = 'backup_' . date('Y_m_d_His') . '.sql.gz';
+            $filename = 'backup_' . date('Y_m_d_His') . '.zip';
             $path = 'private/backups/' . $filename;
             
             Storage::disk('local')->makeDirectory('private/backups');
-            
-            // Generar GZ directamente en PHP
-            $source = fopen($tempSqlFile, 'rb');
             $dest = Storage::disk('local')->path($path);
-            $destStream = fopen($dest, 'wb');
-            stream_filter_append($destStream, 'zlib.deflate', STREAM_FILTER_WRITE, -1);
-            stream_copy_to_stream($source, $destStream);
-            fclose($source);
-            fclose($destStream);
+            
+            // Generar ZIP directamente en PHP
+            $zip = new \ZipArchive();
+            if ($zip->open($dest, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
+                // Agregamos el archivo SQL dentro del ZIP
+                $zip->addFile($tempSqlFile, 'database_backup_' . date('Y_m_d_His') . '.sql');
+                $zip->close();
+            } else {
+                throw new Exception("No se pudo crear el archivo ZIP de respaldo.");
+            }
 
             @unlink($tempSqlFile);
 
