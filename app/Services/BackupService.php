@@ -71,6 +71,11 @@ class BackupService
 
             $configureBinaryPath = function($d) {
                 if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                    // Windows sockets fail in mysqldump under PHP if SystemRoot is missing
+                    if (!getenv('SystemRoot')) putenv('SystemRoot=C:\Windows');
+                    if (!getenv('SYSTEMROOT')) putenv('SYSTEMROOT=C:\Windows');
+                    if (!getenv('COMSPEC')) putenv('COMSPEC=C:\Windows\System32\cmd.exe');
+                    
                     $possiblePaths = [
                         'D:\\xampp82\\mysql\\bin',
                         'C:\\xampp\\mysql\\bin',
