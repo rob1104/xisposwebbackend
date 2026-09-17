@@ -119,7 +119,8 @@ class RestauranteController extends Controller
                     'precio'             => $item['precio'],
                     'notas'              => $item['notas'] ?? null,
                     'modificadores_json' => $item['modificadores'] ?? null,
-                    'impreso_cocina'     => false
+                    'impreso_cocina'     => false,
+                    'tiempo'             => $item['tiempo'] ?? null
                 ]);
             }
 

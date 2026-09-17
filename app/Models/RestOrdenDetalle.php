@@ -14,6 +14,7 @@ class RestOrdenDetalle extends Model
         'rest_orden_id',
         'producto_id',
         'impreso_cocina',
+        'tiempo',
         'cantidad',
         'precio',
         'notas',
