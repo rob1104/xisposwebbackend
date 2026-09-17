@@ -131,6 +131,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/buscar-filtro', [InventarioController::class, 'buscarProducto'])->name('inventario.buscar');
         Route::get('/stock-especifico', [InventarioController::class, 'obtenerStockActual'])->name('inventario.obtener-stock-actual');
         Route::post('/movimiento', [InventarioController::class, 'registrarMovimiento']);
+        Route::post('/movimiento-masivo', [InventarioController::class, 'registrarMovimientoMasivo']);
         ROute::get(('/reporte-consolidado'), [InventarioController::class, 'reporteConsolidado']);
         // Consulta de stock en todas las sucursales para un producto
         Route::get('stock-global/{producto_id}', [InventarioController::class, 'stockGlobal']);

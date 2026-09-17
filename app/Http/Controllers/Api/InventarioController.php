@@ -172,6 +172,72 @@ class InventarioController extends Controller
         });
     }
 
+    public function registrarMovimientoMasivo(Request $request)
+    {
+        $request->validate([
+            'sucursal_id' => 'required|exists:sucursales,id',
+            'tipo' => 'required|in:ENTRADA,SALIDA,AJUSTE',
+            'observaciones' => 'nullable|string',
+            'productos' => 'required|array|min:1',
+            'productos.*.producto_id' => 'required|exists:productos,id',
+            'productos.*.cantidad' => 'required|numeric',
+        ]);
+
+        return DB::transaction(function () use ($request) {
+            $movimientos = [];
+            foreach ($request->productos as $item) {
+                $stock = SucursalProducto::firstOrCreate(
+                    [
+                        'sucursal_id' => $request->sucursal_id,
+                        'producto_id' => $item['producto_id']
+                    ],
+                    [
+                        'stock_actual' => 0,
+                        'cantidad' => 0
+                    ]
+                );
+
+                $stockAnterior = $stock->stock_actual;
+                $cantidadMovimiento = $item['cantidad'];
+                $tipoFinal = $request->tipo;
+                $stockNuevo = 0;
+
+                if ($request->tipo === 'AJUSTE') {
+                    $diferencia = $item['cantidad'] - $stockAnterior;
+                    $tipoFinal = $diferencia >= 0 ? 'ENTRADA (AJUSTE)' : 'SALIDA (AJUSTE)';
+                    $cantidadMovimiento = abs($diferencia);
+                    $stockNuevo = $item['cantidad'];
+                } elseif ($request->tipo === 'ENTRADA') {
+                    $stockNuevo = $stockAnterior + $item['cantidad'];
+                } elseif ($request->tipo === 'SALIDA') {
+                    $stockNuevo = $stockAnterior - $item['cantidad'];
+                }
+
+                $stock->stock_actual = $stockNuevo;
+                $stock->cantidad = $stockNuevo;
+                $stock->save();
+
+                $movimiento = InventarioMovimiento::create([
+                    'sucursal_id' => $request->sucursal_id,
+                    'producto_id' => $item['producto_id'],
+                    'user_id' => Auth::id(),
+                    'tipo_movimiento' => $tipoFinal,
+                    'cantidad' => $cantidadMovimiento,
+                    'stock_anterior' => $stockAnterior,
+                    'stock_nuevo' => $stockNuevo,
+                    'observaciones' => $request->observaciones
+                ]);
+
+                $movimientos[] = $movimiento;
+            }
+
+            return response()->json([
+                'message' => 'Movimientos masivos registrados con éxito',
+                'data' => $movimientos
+            ], 201);
+        });
+    }
+
     public function getSucursales()
     {
         return response()->json(Sucursal::all(['id', 'nombre']));
