@@ -59,32 +59,55 @@ class BackupService
             $tempSqlFile = storage_path('app/private/temp_backup_' . $backup->id . '.sql');
 
             // Utilizando Spatie DbDumper que es robusto y probado
+            // Inicialmente NO usamos doNotUseColumnStatistics porque versiones antiguas y MariaDB fallan al no reconocer el flag
             $dumper = MySql::create()
                 ->setDbName($dbName)
                 ->setUserName($dbUser)
                 ->setPassword($dbPass)
                 ->setHost($dbHost)
                 ->setPort($dbPort)
-                ->doNotUseColumnStatistics()
                 ->addExtraOption('--routines')
                 ->addExtraOption('--triggers');
 
-            // Si falla encontrando el binario en Windows con XAMPP, intentamos decirle dónde podría estar
-            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                $possiblePaths = [
-                    'D:\\xampp82\\mysql\\bin',
-                    'C:\\xampp\\mysql\\bin',
-                    'D:\\xampp\\mysql\\bin',
-                ];
-                foreach ($possiblePaths as $path) {
-                    if (file_exists($path . '\\mysqldump.exe') || file_exists($path . '\\mariadb-dump.exe')) {
-                        $dumper->setDumpBinaryPath($path);
-                        break;
+            $configureBinaryPath = function($d) {
+                if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                    $possiblePaths = [
+                        'D:\\xampp82\\mysql\\bin',
+                        'C:\\xampp\\mysql\\bin',
+                        'D:\\xampp\\mysql\\bin',
+                    ];
+                    foreach ($possiblePaths as $path) {
+                        if (file_exists($path . '\\mysqldump.exe') || file_exists($path . '\\mariadb-dump.exe')) {
+                            $d->setDumpBinaryPath($path);
+                            break;
+                        }
                     }
                 }
-            }
+            };
 
-            $dumper->dumpToFile($tempSqlFile);
+            $configureBinaryPath($dumper);
+
+            try {
+                $dumper->dumpToFile($tempSqlFile);
+            } catch (Exception $e) {
+                // Si el error es debido a que el cliente es MySQL 8+ y el servidor 5.7-, fallará pidiendo apagar column_statistics
+                if (strpos($e->getMessage(), 'COLUMN_STATISTICS') !== false || strpos($e->getMessage(), 'column-statistics') !== false) {
+                    $dumper = MySql::create()
+                        ->setDbName($dbName)
+                        ->setUserName($dbUser)
+                        ->setPassword($dbPass)
+                        ->setHost($dbHost)
+                        ->setPort($dbPort)
+                        ->doNotUseColumnStatistics()
+                        ->addExtraOption('--routines')
+                        ->addExtraOption('--triggers');
+                        
+                    $configureBinaryPath($dumper);
+                    $dumper->dumpToFile($tempSqlFile);
+                } else {
+                    throw $e;
+                }
+            }
 
             $filename = 'backup_' . date('Y_m_d_His') . '.sql.gz';
             $path = 'private/backups/' . $filename;
