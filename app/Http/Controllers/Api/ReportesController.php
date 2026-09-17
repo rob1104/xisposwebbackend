@@ -74,4 +74,98 @@ class ReportesController extends Controller
 
         return $pdf->stream();
     }
+
+    public function ventasPorProducto(Request $request) {
+        $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date',
+            'sucursal_id' => 'nullable|exists:sucursales,id'
+        ]);
+
+        $user = auth()->user();
+        $sucursal_id = $user->hasRole('Super Administrador') || $user->hasRole('Administrador') ? $request->sucursal_id : $user->sucursal_activa_id;
+
+        $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
+        $fecha_fin = Carbon::parse($request->fecha_fin)->endOfDay();
+
+        $query = \Illuminate\Support\Facades\DB::table('venta_detalles')
+            ->join('ventas', 'venta_detalles.venta_id', '=', 'ventas.id')
+            ->join('productos', 'venta_detalles.producto_id', '=', 'productos.id')
+            ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
+            ->whereBetween('ventas.created_at', [$fecha_inicio, $fecha_fin])
+            ->where('ventas.status', 'Completada');
+
+        if ($sucursal_id) {
+            $query->where('ventas.sucursale_id', $sucursal_id);
+        }
+
+        $reporte = $query->select(
+            'productos.id',
+            'productos.codigo_barras',
+            'productos.nombre as producto_nombre',
+            'categorias.nombre as categoria_nombre',
+            \Illuminate\Support\Facades\DB::raw('SUM(venta_detalles.cantidad) as total_vendido'),
+            \Illuminate\Support\Facades\DB::raw('SUM(venta_detalles.total) as total_ingresos')
+        )
+        ->groupBy('productos.id', 'productos.codigo_barras', 'productos.nombre', 'categorias.nombre')
+        ->orderByDesc('total_vendido')
+        ->get();
+
+        $kpis = [
+            'productos_distintos' => $reporte->count(),
+            'cantidad_total' => $reporte->sum('total_vendido'),
+            'ingresos_totales' => $reporte->sum('total_ingresos'),
+            'producto_estrella' => $reporte->first() ? $reporte->first()->producto_nombre : 'N/A'
+        ];
+
+        return response()->json(compact('reporte', 'kpis'));
+    }
+
+    public function ventasPorProductoPdf(Request $request)
+    {
+        $sucursal_id = $request->sucursal_id;
+        $user = auth()->user();
+        $sucursal_id = $user->hasRole('Super Administrador') || $user->hasRole('Administrador') ? $request->sucursal_id : $user->sucursal_activa_id;
+
+        $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
+        $fecha_fin = Carbon::parse($request->fecha_fin)->endOfDay();
+
+        $query = \Illuminate\Support\Facades\DB::table('venta_detalles')
+            ->join('ventas', 'venta_detalles.venta_id', '=', 'ventas.id')
+            ->join('productos', 'venta_detalles.producto_id', '=', 'productos.id')
+            ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
+            ->whereBetween('ventas.created_at', [$fecha_inicio, $fecha_fin])
+            ->where('ventas.status', 'Completada');
+
+        if ($sucursal_id) {
+            $query->where('ventas.sucursale_id', $sucursal_id);
+        }
+
+        $reporte = $query->select(
+            'productos.codigo_barras',
+            'productos.nombre as producto_nombre',
+            'categorias.nombre as categoria_nombre',
+            \Illuminate\Support\Facades\DB::raw('SUM(venta_detalles.cantidad) as total_vendido'),
+            \Illuminate\Support\Facades\DB::raw('SUM(venta_detalles.total) as total_ingresos')
+        )
+        ->groupBy('productos.codigo_barras', 'productos.nombre', 'categorias.nombre')
+        ->orderByDesc('total_ingresos')
+        ->get();
+
+        if ($reporte->isEmpty()) {
+            return response()->json(['message' => 'No hay datos'], 404);
+        }
+
+        $resumen = [
+            'inicio' => $fecha_inicio->format('d/m/Y'),
+            'fin'    => $fecha_fin->format('d/m/Y'),
+            'total_ingresos' => $reporte->sum('total_ingresos'),
+            'total_vendido' => $reporte->sum('total_vendido'),
+        ];
+
+        $pdf = Pdf::loadView('pdf.ventas_por_producto', compact('reporte', 'resumen'))
+            ->setPaper('letter', 'portrait');
+
+        return $pdf->stream('ventas_por_producto.pdf');
+    }
 }

@@ -203,6 +203,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('reportes')->group(function () {
         Route::get('/ventas-detalladas', [ReportesController::class, 'ventasDetalladas']);
         Route::get('/ventas-detalladas/pdf', [ReportesController::class, 'ventasDetalladasexportarPdf']);
+        Route::get('/ventas-por-producto', [ReportesController::class, 'ventasPorProducto']);
+        Route::get('/ventas-por-producto/pdf', [ReportesController::class, 'ventasPorProductoPdf']);
         Route::get('/stock', [InventarioController::class, 'reporteStock']);
     });
 
