@@ -33,6 +33,7 @@ class InventarioController extends Controller
         if (!$query) return response()->json([]);
 
         $productos = Producto::where('status', true)
+        ->where('tipo_producto', 'Inventariable')
         ->where(function($q) use ($query) {
             $q->where('nombre', 'LIKE', "%{$query}%")
                 ->orWhere('codigo_barras', 'LIKE', "%{$query}%");
@@ -111,10 +112,15 @@ class InventarioController extends Controller
         // 1. Validar los datos de entrada
         $request->validate([
             'sucursal_id' => 'required|exists:sucursales,id',
-            'producto_id' => 'required|exists:productos,id',
+            'producto_id' => [
+                'required',
+                \Illuminate\Validation\Rule::exists('productos', 'id')->where('tipo_producto', 'Inventariable')
+            ],
             'tipo' => 'required|in:ENTRADA,SALIDA,AJUSTE',
             'cantidad' => 'required|numeric',
             'observaciones' => 'nullable|string'
+        ], [
+            'producto_id.exists' => 'El producto seleccionado no es inventariable o no existe.'
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -179,8 +185,13 @@ class InventarioController extends Controller
             'tipo' => 'required|in:ENTRADA,SALIDA,AJUSTE',
             'observaciones' => 'nullable|string',
             'productos' => 'required|array|min:1',
-            'productos.*.producto_id' => 'required|exists:productos,id',
+            'productos.*.producto_id' => [
+                'required',
+                \Illuminate\Validation\Rule::exists('productos', 'id')->where('tipo_producto', 'Inventariable')
+            ],
             'productos.*.cantidad' => 'required|numeric',
+        ], [
+            'productos.*.producto_id.exists' => 'Uno o más productos seleccionados no son inventariables o no existen.'
         ]);
 
         return DB::transaction(function () use ($request) {
@@ -352,8 +363,10 @@ class InventarioController extends Controller
 
     public function reporteConsolidado()
     {
-        // Obtenemos todos los productos y sus existencias por sucursal
-        $productos = Producto::with(['categoria', 'sucursalProductos'])->get();
+        // Obtenemos solo productos Inventariables y sus existencias por sucursal
+        $productos = Producto::with(['categoria', 'sucursalProductos'])
+            ->where('tipo_producto', 'Inventariable')
+            ->get();
 
         return $productos->map(function ($p) {
             $data = [
@@ -408,8 +421,10 @@ class InventarioController extends Controller
         $fecha = $request->query('fecha'); // Ejemplo: '2023-10-15'
         $sucursalId = $request->query('sucursal_id');
 
-        // Obtenemos todos los productos
-        $productos = Producto::with('categoria')->get();
+        // Obtenemos solo productos Inventariables
+        $productos = Producto::with('categoria')
+            ->where('tipo_producto', 'Inventariable')
+            ->get();
 
         $reporte = $productos->map(function ($producto) use ($fecha, $sucursalId) {
             // Buscamos el último movimiento antes o durante esa fecha para esta sucursal

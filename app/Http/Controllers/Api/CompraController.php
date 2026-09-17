@@ -43,9 +43,14 @@ class CompraController extends Controller
             'iva' => 'required|numeric',
             'total' => 'required|numeric',
             'detalles' => 'required|array|min:1',
-            'detalles.*.producto_id' => 'required|exists:productos,id',
+            'detalles.*.producto_id' => [
+                'required',
+                \Illuminate\Validation\Rule::exists('productos', 'id')->where('tipo_producto', 'Inventariable'),
+            ],
             'detalles.*.cantidad' => 'required|numeric|min:0.000001',
             'detalles.*.costo_unitario' => 'required|numeric|min:0',
+        ], [
+            'detalles.*.producto_id.exists' => 'Uno o más productos seleccionados no son inventariables o no existen.'
         ]);
 
         $sucursalId = $request->sucursale_id ?? $request->header('X-Sucursal-Id');
