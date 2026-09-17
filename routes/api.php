@@ -91,8 +91,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sucursales/{id}/emisor', [SucursalController::class, 'getEmisor'])->name('sucursales.emisor.get');
 
     Route::get('/auditoria/productos-sucursal/{sucursal_id}', [AuditoriaInventarioController::class, 'obtenerProductosParaConteo']);
+    Route::apiResource('auditoria-inventario', AuditoriaInventarioController::class);
+    Route::post('/auditoria-inventario/{id}/completar', [AuditoriaInventarioController::class, 'completar']);
     Route::post('/auditoria/procesar', [AuditoriaInventarioController::class, 'procesarConteo']);
     Route::get('/auditoria/reporte/pdf/{id}', [AuditoriaInventarioController::class, 'generaPDF']);
+
+    // Backups
+    Route::get('/backups', [\App\Http\Controllers\Api\BackupController::class, 'index']);
+    Route::post('/backups', [\App\Http\Controllers\Api\BackupController::class, 'store']);
+    Route::get('/backups/{id}', [\App\Http\Controllers\Api\BackupController::class, 'show']);
+    Route::get('/backups/{id}/download', [\App\Http\Controllers\Api\BackupController::class, 'download']);
+    Route::delete('/backups/{id}', [\App\Http\Controllers\Api\BackupController::class, 'destroy']);
 
     Route::get('/compras/{id}/pdf', [CompraController::class, 'descargarPDF'])->name('compras.pdf');
 
