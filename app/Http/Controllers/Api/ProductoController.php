@@ -182,12 +182,34 @@ class ProductoController extends Controller
             ], 422);
         }
 
-        if ($producto->imagen) {
-            $path = str_replace(asset('storage/'), '', $producto->imagen);
-            Storage::disk('public')->delete($path);
+        try {
+            DB::transaction(function () use ($producto) {
+                // Delete image if exists
+                if ($producto->imagen) {
+                    $path = str_replace(asset('storage/'), '', $producto->imagen);
+                    Storage::disk('public')->delete($path);
+                }
+                
+                // Clear sucursal pivot records explicitly (if they don't have cascade)
+                $producto->sucursales()->detach();
+                
+                // Clear category relationships
+                DB::table('categoria_producto')->where('producto_id', $producto->id)->delete();
+                
+                // Finally delete the product
+                $producto->delete();
+            });
+
+            return response()->json(['message' => 'Producto eliminado correctamente']);
+            
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->getCode() == "23000") {
+                return response()->json([
+                    'message' => "No se puede eliminar este producto porque ya tiene registros asociados en el sistema (comandas de restaurante, compras, etc). Se recomienda editarlo y desmarcar la casilla 'Activo' para ocultarlo."
+                ], 422);
+            }
+            throw $e;
         }
-        $producto->delete();
-        return response()->json(['message' => 'Producto e imagen eliminados correctamente']);
     }
 
     public function search(Request $request)
