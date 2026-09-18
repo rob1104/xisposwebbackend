@@ -22,11 +22,22 @@ class VentaController extends Controller
     public function index(Request $request)
     {
         $sucursalId = $request->header('X-Sucursal-Id');
+        $inicio = $request->query('inicio');
+        $fin = $request->query('fin');
+
         $query = Venta::with(['cliente', 'pagos', 'user'])
             ->orderBy('created_at', 'desc');
+            
         if ($sucursalId) {
             $query->where('sucursale_id', $sucursalId);
         }
+
+        if ($inicio && $fin) {
+            // Include entire end day
+            $finDate = \Carbon\Carbon::parse($fin)->endOfDay();
+            $query->whereBetween('created_at', [$inicio, $finDate]);
+        }
+
         return response()->json($query->get());
     }
 
