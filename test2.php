@@ -1,0 +1,1 @@
+<?php require __DIR__."/vendor/autoload.php"; $app = require_once __DIR__."/bootstrap/app.php"; $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class); $kernel->bootstrap(); $turno = App\Models\CajaTurno::latest()->first(); echo json_encode(["saldo_inicial" => $turno->saldo_inicial, "saldo_cierre" => $turno->saldo_cierre, "diferencia" => $turno->diferencia]);

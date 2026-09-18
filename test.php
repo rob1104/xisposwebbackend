@@ -1,0 +1,1 @@
+<?php require __DIR__."/vendor/autoload.php"; $app = require_once __DIR__."/bootstrap/app.php"; $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class); $kernel->bootstrap(); $turno = App\Models\CajaTurno::latest()->first(); $controller = app()->make(App\Http\Controllers\Api\PosController::class); print_r($controller->datosImpresionCorte($turno->id));

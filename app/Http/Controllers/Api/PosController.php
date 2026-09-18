@@ -336,7 +336,7 @@ class PosController extends Controller
             ->sum('monto') ?? 0;
 
         // 3. MOVIMIENTOS
-        $entradas = $turno->movimientos->where('tipo', 'Ingreso')->sum('monto');
+        $entradas = $turno->movimientos->where('tipo', 'Entrada')->sum('monto');
         $retiros = $turno->movimientos->where('tipo', 'Retiro')->sum('monto');
         $listaMovimientos = $turno->movimientos->map(function($m){
             return ['tipo' => $m->tipo, 'monto' => $m->monto, 'concepto' => $m->concepto];
