@@ -21,12 +21,23 @@ class CompraController extends Controller
         // 1. Obtenemos el usuario y la sucursal de la cabecera
         $user = Auth::user();
         $sucursal_id = $request->header('X-Sucursal-Id');
+        
+        $inicio = $request->query('inicio');
+        $fin = $request->query('fin');
+
         // 2. Iniciamos la consulta con las relaciones necesarias
         $query = Compra::with(['provider', 'user', 'sucursal']);
+        
         // 3. Aplicamos la lógica de visualización por rol
+        // TODO: Handle user->hasRole('Administrador') correctly but keep existing logic
         if($user->roles[0] !== 'Administrador')
             $query->where('sucursale_id', $sucursal_id);
-        // Si es admin, no entra al 'where' y trae todas las sucursales
+            
+        if ($inicio && $fin) {
+            $finDate = \Carbon\Carbon::parse($fin)->endOfDay();
+            $query->whereBetween('created_at', [$inicio, $finDate]);
+        }
+            
         $compras = $query->orderBy('created_at', 'desc')->get();
 
         return response()->json($compras);
