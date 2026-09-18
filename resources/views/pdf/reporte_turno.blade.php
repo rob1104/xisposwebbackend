@@ -61,7 +61,7 @@
         .kpi-container { width: 100%; display: table; margin-bottom: 20px; border-collapse: separate; border-spacing: 10px 0; margin-left: -10px; }
         .kpi-box {
             display: table-cell;
-            width: 25%;
+            width: 20%;
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 4px;
@@ -81,21 +81,37 @@
             color: #475569;
             font-weight: bold;
             text-transform: uppercase;
-            font-size: 8px;
+            font-size: 9px;
             padding: 8px;
             text-align: left;
-            border-bottom: 1px solid #cbd5e1;
         }
         td {
-            padding: 6px 8px;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 9px;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 8px;
+            font-size: 10px;
+            color: #334155;
         }
         tr:nth-child(even) { background-color: #fcfcfc; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .font-mono { font-family: 'Courier New', Courier, monospace; }
         .total-row td { border-top: 2px solid #cbd5e1; font-weight: bold; background-color: white; }
+
+        /* --- SECCIÓN FIRMA --- */
+        .firma-container {
+            margin-top: 40px;
+            text-align: center;
+        }
+        .firma-linea {
+            display: inline-block;
+            width: 250px;
+            border-top: 1px solid #000;
+            padding-top: 5px;
+            margin-top: 50px;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #334155;
+        }
 
         /* --- ARQUEO --- */
         .denominaciones-grid { width: 100%; margin-top: 10px; }
@@ -121,11 +137,14 @@
 <body>
 
 <header>
-    <div class="header-title">Reporte de Cierre de Turno #{{ $turno->id }} - CORTE DE CAJA</div>
-    <div class="header-meta">
-        SUCURSAL: {{ strtoupper($turno->sucursal->nombre) }}<br>
-        TURNO ID: #{{ str_pad($turno->id, 6, '0', STR_PAD_LEFT) }}<br>
-        FECHA: {{ $turno->created_at->format('d/m/Y h:i A') }}
+    <h1>Corte de Caja (Corte Z)</h1>
+    <p>TURNO #{{ $turno->id }} &nbsp;|&nbsp; <strong>FECHA:</strong> {{ $turno->created_at->format('d/m/Y H:i') }}</p>
+    <p><strong>SUCURSAL:</strong> {{ $turno->sucursal->nombre }} &nbsp;|&nbsp; <strong>CAJERO:</strong> {{ $turno->user->name }}</p>
+    <div style="margin-top: 10px; padding: 5px; background: #f1f5f9; display: inline-block; border-radius: 4px; font-size: 10px;">
+        <strong>ESTADO:</strong> {{ strtoupper($turno->status) }}
+        @if($turno->cerrado_at)
+            &nbsp;|&nbsp; <strong>CIERRE:</strong> {{ \Carbon\Carbon::parse($turno->cerrado_at)->format('d/m/Y H:i') }}
+        @endif
     </div>
 </header>
 
@@ -143,11 +162,12 @@
         <div class="kpi-value">${{ number_format($resumen['ventas_efectivo'], 2) }}</div>
     </div>
     <div class="kpi-box">
-        <div class="kpi-label">Entradas / Retiros</div>
-        @php $netoMovs = $resumen['total_entradas'] - $resumen['total_retiros']; @endphp
-        <div class="kpi-value {{ $netoMovs < 0 ? 'text-red' : 'text-green' }}">
-            {{ $netoMovs >= 0 ? '+' : '' }}${{ number_format($netoMovs, 2) }}
-        </div>
+        <div class="kpi-label">Entradas</div>
+        <div class="kpi-value text-green">+${{ number_format($resumen['total_entradas'], 2) }}</div>
+    </div>
+    <div class="kpi-box">
+        <div class="kpi-label">Retiros</div>
+        <div class="kpi-value text-red">-${{ number_format($resumen['total_retiros'], 2) }}</div>
     </div>
     <div class="kpi-box kpi-highlight">
         <div class="kpi-label">Total en Caja</div>
