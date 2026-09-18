@@ -1,1 +1,0 @@
-<?php require __DIR__."/vendor/autoload.php"; $app = require_once __DIR__."/bootstrap/app.php"; $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class); $kernel->bootstrap(); echo App\Models\CajaTurno::whereNull("sucursale_id")->count();
