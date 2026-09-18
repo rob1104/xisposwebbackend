@@ -72,6 +72,9 @@ class InventarioController extends Controller
 
         // Consultamos la tabla sucursal_productos
         $inventario = SucursalProducto::where('sucursal_id', $sucursalId)
+            ->whereHas('producto', function ($query) {
+                $query->where('tipo_producto', 'Inventariable');
+            })
             ->with(['producto.categoria']) // Traemos los datos del producto y su categoría
             ->get()
             ->map(function ($item) {
