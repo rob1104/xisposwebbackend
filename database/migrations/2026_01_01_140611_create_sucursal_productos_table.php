@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('sucursal_id')->constrained('sucursales');
             $table->foreignId('producto_id')->constrained('productos')->onDelete('cascade');
-            $table->decimal('cantidad', 14, 6);
             $table->decimal('stock_actual', 14, 6)->default(0);
             $table->decimal('stock_minimo', 14, 6)->default(0);
             $table->decimal('stock_maximo', 14, 6)->default(0);
