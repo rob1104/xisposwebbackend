@@ -22,8 +22,8 @@ class PosController extends Controller
     public function abrirTurno(Request $request)
     {
         $request->validate([
-            'fondo_apertura' => 'required|numeric',
-            'tipo_cambio' => 'required|numeric',
+            'fondo_apertura' => 'required|numeric|min:0',
+            'tipo_cambio' => 'required|numeric|min:0.01',
             'sucursal_id' => 'required|exists:sucursales,id',
             'supervisor_email' => 'required|exists:users,email',
             'supervisor_password' => 'required'
