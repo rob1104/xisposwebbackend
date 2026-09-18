@@ -207,12 +207,22 @@ class PosController extends Controller
     public function searchByFilter(Request $request)
     {
         $query = $request->get('q');
+        $origen = $request->get('origen');
+
         if (empty($query)) return response()->json([]);
 
-        $turno = CajaTurno::where('user_id', auth()->user()->id)->where('status', 'Abierto')->first();
-        if (!$turno) return response()->json(['message' => 'Debe abrir turno'], 403);
+        $sucursalId = null;
 
-        $sucursalId = $turno->sucursale_id;
+        if ($origen === 'restaurante') {
+            $sucursalId = $request->header('X-Sucursal-Id');
+            if (!$sucursalId) return response()->json(['message' => 'Sucursal no seleccionada'], 400);
+        } else {
+            $turno = CajaTurno::where('user_id', auth()->user()->id)->where('status', 'Abierto')->first();
+            if (!$turno) {
+                return response()->json(['message' => 'Debe abrir turno'], 403);
+            }
+            $sucursalId = $turno->sucursale_id;
+        }
 
         // Cargamos componentes y sus pivotes de sucursal para evitar N+1
         $productos = Producto::with([
