@@ -28,11 +28,32 @@ class RestauranteController extends Controller
             // Opcional: Limpiamos el objeto orden para enviar menos datos,
             // ya que solo queríamos el total
             unset($mesa->ordenActiva);
+            
+            $mesa->is_para_llevar = false;
 
             return $mesa;
         });
 
-        return response()->json($mesas);
+        // 3. Cargamos órdenes Para Llevar abiertas como "mesas virtuales"
+        $ordenesParaLlevar = RestOrden::where('sucursale_id', $sucursalId)
+            ->whereNull('mesa_id')
+            ->where('estatus', 'Abierta')
+            ->get()
+            ->map(function($orden) {
+                return [
+                    'id' => 'llevar_' . $orden->id,
+                    'orden_id' => $orden->id,
+                    'nombre' => 'Llevar: ' . ($orden->nombre_cliente ?: 'Sin Nombre'),
+                    'ocupada' => true,
+                    'total_actual' => $orden->total,
+                    'is_para_llevar' => true
+                ];
+            });
+
+        // Combinamos
+        $mesasCombinadas = $mesas->concat($ordenesParaLlevar);
+
+        return response()->json($mesasCombinadas);
     }
 
     // Carga meseros
