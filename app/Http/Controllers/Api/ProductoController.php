@@ -193,9 +193,6 @@ class ProductoController extends Controller
                 // Clear sucursal pivot records explicitly (if they don't have cascade)
                 $producto->sucursales()->detach();
                 
-                // Clear category relationships
-                DB::table('categoria_producto')->where('producto_id', $producto->id)->delete();
-                
                 // Finally delete the product
                 $producto->delete();
             });
