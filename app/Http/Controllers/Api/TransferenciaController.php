@@ -89,9 +89,10 @@ class TransferenciaController extends Controller
 
         $roles = $user->roles->pluck('name');
 
-        // Si NO es administrador, filtrar solo lo que va hacia SU sucursal
+        // Si NO es administrador, filtrar solo lo que va hacia SUS sucursales
         if ($roles[0] !== 'Administrador') {
-            $query->where('sucursal_destino_id', $user->sucursal_id);
+            $sucursalesIds = $user->sucursales()->pluck('sucursales.id');
+            $query->whereIn('sucursal_destino_id', $sucursalesIds);
         }
 
         return $query->orderBy('fecha_envio', 'desc')->get();

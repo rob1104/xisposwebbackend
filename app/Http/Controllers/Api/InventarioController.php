@@ -398,8 +398,9 @@ class InventarioController extends Controller
             return SucursalProducto::all();
         }
 
-        // El gerente solo ve su sucursal asignada
-        return SucursalProducto::where('sucursal_id', $user->sucursal_id)->get();
+        // El gerente solo ve sus sucursales asignadas
+        $sucursalesIds = $user->sucursales()->pluck('sucursales.id');
+        return SucursalProducto::whereIn('sucursal_id', $sucursalesIds)->get();
     }
 
     public function stockPorSucursal()
