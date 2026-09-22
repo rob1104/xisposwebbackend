@@ -38,7 +38,7 @@ class InventarioController extends Controller
             $q->where('nombre', 'LIKE', "%{$query}%")
                 ->orWhere('codigo_barras', 'LIKE', "%{$query}%");
         })
-            ->with('categoria')
+            ->with(['categoria', 'impuestos'])
             ->limit(15)
             ->get();
 
