@@ -89,10 +89,17 @@ class TransferenciaController extends Controller
 
         $roles = $user->roles->pluck('name');
 
-        // Si NO es administrador, filtrar solo lo que va hacia SUS sucursales
-        if ($roles[0] !== 'Administrador') {
-            $sucursalesIds = $user->sucursales()->pluck('sucursales.id');
-            $query->whereIn('sucursal_destino_id', $sucursalesIds);
+        $sucursalActivaId = config('app.current_sucursal_id');
+
+        // Filtrar estrictamente por la sucursal que el usuario tiene activa en su pantalla
+        if ($sucursalActivaId) {
+            $query->where('sucursal_destino_id', $sucursalActivaId);
+        } else {
+            // Si NO es administrador y por alguna razón no tiene sucursal activa, mostrar solo las suyas
+            if ($roles[0] !== 'Administrador') {
+                $sucursalesIds = $user->sucursales()->pluck('sucursales.id');
+                $query->whereIn('sucursal_destino_id', $sucursalesIds);
+            }
         }
 
         return $query->orderBy('fecha_envio', 'desc')->get();
