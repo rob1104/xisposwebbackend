@@ -168,4 +168,83 @@ class ReportesController extends Controller
 
         return $pdf->stream('ventas_por_producto.pdf');
     }
+
+    public function traspasos(Request $request) {
+        $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date',
+            'sucursal_id' => 'nullable|exists:sucursales,id'
+        ]);
+
+        $user = auth()->user();
+        $sucursal_id = ($user->hasRole('Administrador') || $user->hasRole('Super Administrador')) ? $request->sucursal_id : config('app.current_sucursal_id');
+
+        $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
+        $fecha_fin = Carbon::parse($request->fecha_fin)->endOfDay();
+
+        $query = \App\Models\Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'userRecibe', 'detalles.producto'])
+            ->whereBetween('fecha_envio', [$fecha_inicio, $fecha_fin]);
+
+        if ($sucursal_id) {
+            $query->where(function($q) use ($sucursal_id) {
+                $q->where('sucursal_origen_id', $sucursal_id)
+                  ->orWhere('sucursal_destino_id', $sucursal_id);
+            });
+        }
+
+        $traspasos = $query->orderBy('fecha_envio', 'desc')->get();
+
+        $kpis = [
+            'total_traspasos' => $traspasos->count(),
+            'total_articulos' => $traspasos->sum(function($t) { return $t->detalles->sum('cantidad_enviada'); }),
+            'pendientes' => $traspasos->where('estatus', 'Enviado')->count(),
+            'completados' => $traspasos->where('estatus', 'Recibido')->count(),
+        ];
+
+        return response()->json(compact('traspasos', 'kpis'));
+    }
+
+    public function traspasosPdf(Request $request) {
+        $request->validate([
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date',
+            'sucursal_id' => 'nullable|exists:sucursales,id'
+        ]);
+
+        $user = auth()->user();
+        $sucursal_id = ($user->hasRole('Administrador') || $user->hasRole('Super Administrador')) ? $request->sucursal_id : config('app.current_sucursal_id');
+
+        $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
+        $fecha_fin = Carbon::parse($request->fecha_fin)->endOfDay();
+
+        $query = \App\Models\Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'userRecibe', 'detalles.producto'])
+            ->whereBetween('fecha_envio', [$fecha_inicio, $fecha_fin]);
+
+        if ($sucursal_id) {
+            $query->where(function($q) use ($sucursal_id) {
+                $q->where('sucursal_origen_id', $sucursal_id)
+                  ->orWhere('sucursal_destino_id', $sucursal_id);
+            });
+        }
+
+        $traspasos = $query->orderBy('fecha_envio', 'desc')->get();
+
+        if ($traspasos->isEmpty()) {
+            return response()->json(['message' => 'No hay datos'], 404);
+        }
+
+        $resumen = [
+            'inicio' => $fecha_inicio->format('d/m/Y'),
+            'fin'    => $fecha_fin->format('d/m/Y'),
+            'total_traspasos' => $traspasos->count(),
+            'total_articulos' => $traspasos->sum(function($t) { return $t->detalles->sum('cantidad_enviada'); }),
+            'pendientes' => $traspasos->where('estatus', 'Enviado')->count(),
+            'completados' => $traspasos->where('estatus', 'Recibido')->count(),
+        ];
+
+        $pdf = Pdf::loadView('pdf.reporte_traspasos', compact('traspasos', 'resumen'))
+            ->setPaper('letter', 'landscape');
+
+        return $pdf->stream('reporte_traspasos.pdf');
+    }
 }
