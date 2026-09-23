@@ -103,12 +103,16 @@
                 <div class="text-bold" style="font-size: 8.5px;">{{ $t->sucursalDestino->nombre ?? 'N/A' }}</div>
             </td>
             <td>
-                <div class="badge" style="background-color: {{ $t->estatus === 'Recibido' ? '#dcfce7' : '#ffedd5' }}; color: {{ $t->estatus === 'Recibido' ? '#166534' : '#c2410c' }};">
+                <div class="badge" style="background-color: {{ $t->estatus === 'Recibido' ? '#dcfce7' : ($t->estatus === 'Cancelado' ? '#fee2e2' : '#ffedd5') }}; color: {{ $t->estatus === 'Recibido' ? '#166534' : ($t->estatus === 'Cancelado' ? '#dc2626' : '#c2410c') }};">
                     {{ strtoupper($t->estatus) }}
                 </div>
                 @if($t->fecha_recepcion)
                     <div style="color: #64748b; font-size: 8px; margin-top: 2px;">{{ \Carbon\Carbon::parse($t->fecha_recepcion)->format('d/m/Y') }}</div>
-                    <div style="font-size: 8px;">Por: {{ $t->userRecibe->name ?? 'N/A' }}</div>
+                    @if($t->estatus === 'Cancelado')
+                        <div style="font-size: 8px; color: #dc2626;">Cancelado por: {{ $t->userRecibe->name ?? 'N/A' }}</div>
+                    @else
+                        <div style="font-size: 8px;">Por: {{ $t->userRecibe->name ?? 'N/A' }}</div>
+                    @endif
                 @endif
             </td>
             <td>
