@@ -132,6 +132,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('pendientes', [TransferenciaController::class, 'pendientes']);
         Route::post('enviar', [TransferenciaController::class, 'store']);
         Route::post('recibir/{id}', [TransferenciaController::class, 'recibir']);
+        Route::post('cancelar/{id}', [TransferenciaController::class, 'cancelar']);
         Route::get('historial', [TransferenciaController::class, 'index']);
         Route::get('{id}/pdf', [TransferenciaController::class, 'downloadPdf']);
     });

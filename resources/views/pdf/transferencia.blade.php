@@ -26,7 +26,7 @@
 <div class="header">
     <div class="title">XISPOS WEB</div>
     <div class="subtitle">Comprobante de Traspaso de Mercancía #{{ $transferencia->id }}</div>
-    <div style="margin-top: 5px; font-weight: bold; color: {{ $transferencia->estatus == 'Recibido' ? '#166534' : '#c2410c' }}; font-size: 12px;">ESTADO: {{ strtoupper($transferencia->estatus) }}</div>
+    <div style="margin-top: 5px; font-weight: bold; color: {{ $transferencia->estatus == 'Recibido' ? '#166534' : ($transferencia->estatus == 'Cancelado' ? '#dc2626' : '#c2410c') }}; font-size: 12px;">ESTADO: {{ strtoupper($transferencia->estatus) }}</div>
 </div>
 
 <table class="info-table">
@@ -47,6 +47,9 @@
                 @if($transferencia->estatus == 'Recibido')
                 <strong>Recibido por:</strong> {{ $transferencia->userRecibe->name ?? 'N/A' }}<br>
                 <strong>Fecha Recepción:</strong> {{ \Carbon\Carbon::parse($transferencia->fecha_recepcion)->format('d/m/Y h:i A') }}
+                @elseif($transferencia->estatus == 'Cancelado')
+                <strong>Cancelado por:</strong> {{ $transferencia->userRecibe->name ?? 'N/A' }}<br>
+                <strong>Fecha Cancelación:</strong> {{ \Carbon\Carbon::parse($transferencia->fecha_recepcion)->format('d/m/Y h:i A') }}
                 @else
                 <strong>Recibido por:</strong> PENDIENTE<br>
                 <strong>Fecha Recepción:</strong> PENDIENTE

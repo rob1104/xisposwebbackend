@@ -153,6 +153,53 @@ class TransferenciaController extends Controller
         });
     }
 
+    public function cancelar($id)
+    {
+        return DB::transaction(function () use ($id) {
+            $transferencia = Transferencia::with('detalles')->findOrFail($id);
+
+            if ($transferencia->estatus !== 'Enviado') {
+                return response()->json(['message' => 'Solo se pueden cancelar transferencias en estatus Enviado'], 400);
+            }
+
+            // Cambiar estatus a Cancelado
+            $transferencia->update([
+                'estatus' => 'Cancelado',
+                'user_recibe_id' => Auth::id(),
+                'fecha_recepcion' => now(),
+            ]);
+
+            // Revertir el stock en la sucursal origen
+            foreach ($transferencia->detalles as $det) {
+                $stockOrigen = SucursalProducto::where('sucursal_id', $transferencia->sucursal_origen_id)
+                    ->where('producto_id', $det->producto_id)
+                    ->first();
+
+                if ($stockOrigen) {
+                    $stockAnterior = (float) $stockOrigen->stock_actual;
+                    $stockNuevo = $stockAnterior + (float) $det->cantidad_enviada;
+
+                    $stockOrigen->update(['stock_actual' => $stockNuevo]);
+
+                    InventarioMovimiento::create([
+                        'sucursal_id'     => $transferencia->sucursal_origen_id,
+                        'producto_id'     => $det->producto_id,
+                        'user_id'         => Auth::id(),
+                        'tipo_movimiento' => 'ENTRADA POR CANCELACION',
+                        'cantidad'        => $det->cantidad_enviada,
+                        'stock_anterior'  => $stockAnterior,
+                        'stock_nuevo'     => $stockNuevo,
+                        'referencia_tipo' => 'Transferencia',
+                        'referencia_id'   => $transferencia->id,
+                        'observaciones'   => "Cancelación de traspaso desde destino"
+                    ]);
+                }
+            }
+
+            return response()->json(['message' => 'Transferencia cancelada y stock devuelto a la sucursal origen', 'id' => $transferencia->id]);
+        });
+    }
+
     public function downloadPdf($id)
     {
         $transferencia = Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'userRecibe', 'detalles.producto'])
