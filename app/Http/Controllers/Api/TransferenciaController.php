@@ -71,7 +71,7 @@ class TransferenciaController extends Controller
                 ]);
             }
 
-            return response()->json(['message' => 'Transferencia enviada y stock de origen descontado']);
+            return response()->json(['message' => 'Transferencia enviada y stock de origen descontado', 'id' => $transfer->id]);
         });
     }
 
@@ -149,7 +149,18 @@ class TransferenciaController extends Controller
                 'fecha_recepcion' => now(),
             ]);
 
-            return response()->json(['message' => 'Inventario actualizado y recepción completada']);
+            return response()->json(['message' => 'Inventario actualizado y recepción completada', 'id' => $transferencia->id]);
         });
+    }
+
+    public function downloadPdf($id)
+    {
+        $transferencia = Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'userRecibe', 'detalles.producto'])
+            ->findOrFail($id);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.transferencia', compact('transferencia'))
+            ->setPaper('letter', 'portrait');
+
+        return $pdf->stream("traspaso_{$id}.pdf");
     }
 }

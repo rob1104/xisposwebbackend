@@ -133,6 +133,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('enviar', [TransferenciaController::class, 'store']);
         Route::post('recibir/{id}', [TransferenciaController::class, 'recibir']);
         Route::get('historial', [TransferenciaController::class, 'index']);
+        Route::get('{id}/pdf', [TransferenciaController::class, 'downloadPdf']);
     });
 
     Route::prefix('inventario')->group(function () {
