@@ -100,7 +100,7 @@ class ProductoController extends Controller
         return DB::transaction(function () use ($request, $producto) {
             $data = $request->only([
                 'nombre', 'codigo_barras', 'categoria_id', 'tipo_producto',
-                'clave_prod_serv', 'clave_unidad', 'status'
+                'clave_prod_serv', 'clave_unidad', 'status', 'merma'
             ]);
             if ($request->hasFile('imagen_file')) {
                 if ($producto->imagen) {

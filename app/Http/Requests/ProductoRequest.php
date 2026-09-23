@@ -35,6 +35,7 @@ class ProductoRequest extends FormRequest
             'objeto_imp'          => 'required|string|size:2',
             'tipo_producto'       => 'required|in:Inventariable,Compuesto,Servicio',
             'ultimo_costo_compra' => 'numeric|min:0',
+            'merma'               => 'nullable|numeric|min:0|max:100',
 
             // Validaciones para relaciones
             'impuestos'           => 'nullable|array',

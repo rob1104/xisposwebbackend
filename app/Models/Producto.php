@@ -14,12 +14,13 @@ class Producto extends Model
     protected $fillable = [
         'codigo_barras', 'nombre', 'categoria_id',
         'clave_prod_serv', 'clave_unidad', 'objeto_imp', 'tipo_producto',
-        'ultimo_costo_compra', 'usuario_creador', 'status', 'imagen'
+        'ultimo_costo_compra', 'usuario_creador', 'status', 'imagen', 'merma'
     ];
 
     protected $casts = [
         'ultimo_costo_compra' => 'decimal:6', // Forzamos 6 decimales
         'status' => 'boolean',
+        'merma' => 'decimal:2',
     ];
 
     public function categoria()
