@@ -20,6 +20,7 @@
         .border-blue { border-left-color: #0284c7; }
         .border-green { border-left-color: #059669; }
         .border-orange { border-left-color: #ea580c; }
+        .border-red { border-left-color: #dc2626; }
         .data-table { width: 100%; border-collapse: collapse; }
         .data-table th { background-color: #1e293b; color: #ffffff; padding: 8px; text-transform: uppercase; font-size: 8px; text-align: left; }
         .data-table td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
@@ -58,9 +59,9 @@
             </div>
         </td>
         <td width="25%">
-            <div class="kpi-card border-orange">
-                <div class="kpi-label">Artículos Transferidos</div>
-                <div class="kpi-value">{{ number_format($resumen['total_articulos'], 2) }}</div>
+            <div class="kpi-card border-red">
+                <div class="kpi-label">Cancelados</div>
+                <div class="kpi-value text-danger">{{ $resumen['cancelados'] }}</div>
             </div>
         </td>
         <td width="25%">

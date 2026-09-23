@@ -212,7 +212,7 @@ class ReportesController extends Controller
 
         $kpis = [
             'total_traspasos' => $traspasos->count(),
-            'total_articulos' => $traspasos->sum(function($t) { return $t->detalles->sum('cantidad_enviada'); }),
+            'cancelados' => $traspasos->where('estatus', 'Cancelado')->count(),
             'pendientes' => $traspasos->where('estatus', 'Enviado')->count(),
             'completados' => $traspasos->where('estatus', 'Recibido')->count(),
         ];
@@ -269,7 +269,7 @@ class ReportesController extends Controller
             'inicio' => $fecha_inicio->format('d/m/Y'),
             'fin'    => $fecha_fin->format('d/m/Y'),
             'total_traspasos' => $traspasos->count(),
-            'total_articulos' => $traspasos->sum(function($t) { return $t->detalles->sum('cantidad_enviada'); }),
+            'cancelados' => $traspasos->where('estatus', 'Cancelado')->count(),
             'pendientes' => $traspasos->where('estatus', 'Enviado')->count(),
             'completados' => $traspasos->where('estatus', 'Recibido')->count(),
         ];
