@@ -65,7 +65,7 @@
             </div>
         </td>
         <td width="25%">
-            <div class="kpi-card border-blue">
+            <div class="kpi-card border-orange">
                 <div class="kpi-label">Traspasos Pendientes</div>
                 <div class="kpi-value">{{ $resumen['pendientes'] }}</div>
             </div>
