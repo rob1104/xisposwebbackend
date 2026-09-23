@@ -177,7 +177,7 @@ class ReportesController extends Controller
         ]);
 
         $user = auth()->user();
-        $sucursal_id = ($user->hasRole('Administrador') || $user->hasRole('Super Administrador')) ? $request->sucursal_id : config('app.current_sucursal_id');
+        $sucursal_id = $request->sucursal_id;
 
         $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
         $fecha_fin = Carbon::parse($request->fecha_fin)->endOfDay();
@@ -185,11 +185,27 @@ class ReportesController extends Controller
         $query = \App\Models\Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'userRecibe', 'detalles.producto'])
             ->whereBetween('fecha_envio', [$fecha_inicio, $fecha_fin]);
 
-        if ($sucursal_id) {
-            $query->where(function($q) use ($sucursal_id) {
-                $q->where('sucursal_origen_id', $sucursal_id)
-                  ->orWhere('sucursal_destino_id', $sucursal_id);
-            });
+        if ($user->hasRole('Administrador') || $user->hasRole('Super Administrador')) {
+            if ($sucursal_id) {
+                $query->where(function($q) use ($sucursal_id) {
+                    $q->where('sucursal_origen_id', $sucursal_id)
+                      ->orWhere('sucursal_destino_id', $sucursal_id);
+                });
+            }
+        } else {
+            $assignedIds = $user->sucursales()->pluck('sucursales.id')->toArray();
+            if ($sucursal_id && in_array($sucursal_id, $assignedIds)) {
+                $query->where(function($q) use ($sucursal_id) {
+                    $q->where('sucursal_origen_id', $sucursal_id)
+                      ->orWhere('sucursal_destino_id', $sucursal_id);
+                });
+            } else {
+                // Si no mandan sucursal o no tienen permiso para la solicitada, mostrar todas las que tienen asignadas
+                $query->where(function($q) use ($assignedIds) {
+                    $q->whereIn('sucursal_origen_id', $assignedIds)
+                      ->orWhereIn('sucursal_destino_id', $assignedIds);
+                });
+            }
         }
 
         $traspasos = $query->orderBy('fecha_envio', 'desc')->get();
@@ -212,7 +228,7 @@ class ReportesController extends Controller
         ]);
 
         $user = auth()->user();
-        $sucursal_id = ($user->hasRole('Administrador') || $user->hasRole('Super Administrador')) ? $request->sucursal_id : config('app.current_sucursal_id');
+        $sucursal_id = $request->sucursal_id;
 
         $fecha_inicio = Carbon::parse($request->fecha_inicio)->startOfDay();
         $fecha_fin = Carbon::parse($request->fecha_fin)->endOfDay();
@@ -220,11 +236,27 @@ class ReportesController extends Controller
         $query = \App\Models\Transferencia::with(['sucursalOrigen', 'sucursalDestino', 'userEnvia', 'userRecibe', 'detalles.producto'])
             ->whereBetween('fecha_envio', [$fecha_inicio, $fecha_fin]);
 
-        if ($sucursal_id) {
-            $query->where(function($q) use ($sucursal_id) {
-                $q->where('sucursal_origen_id', $sucursal_id)
-                  ->orWhere('sucursal_destino_id', $sucursal_id);
-            });
+        if ($user->hasRole('Administrador') || $user->hasRole('Super Administrador')) {
+            if ($sucursal_id) {
+                $query->where(function($q) use ($sucursal_id) {
+                    $q->where('sucursal_origen_id', $sucursal_id)
+                      ->orWhere('sucursal_destino_id', $sucursal_id);
+                });
+            }
+        } else {
+            $assignedIds = $user->sucursales()->pluck('sucursales.id')->toArray();
+            if ($sucursal_id && in_array($sucursal_id, $assignedIds)) {
+                $query->where(function($q) use ($sucursal_id) {
+                    $q->where('sucursal_origen_id', $sucursal_id)
+                      ->orWhere('sucursal_destino_id', $sucursal_id);
+                });
+            } else {
+                // Si no mandan sucursal o no tienen permiso para la solicitada, mostrar todas las que tienen asignadas
+                $query->where(function($q) use ($assignedIds) {
+                    $q->whereIn('sucursal_origen_id', $assignedIds)
+                      ->orWhereIn('sucursal_destino_id', $assignedIds);
+                });
+            }
         }
 
         $traspasos = $query->orderBy('fecha_envio', 'desc')->get();
