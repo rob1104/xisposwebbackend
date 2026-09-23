@@ -7,7 +7,7 @@
         @page { margin: 0cm 0cm; }
         body {
             font-family: 'Helvetica Neue', 'Helvetica', Helvetica, Arial, sans-serif;
-            margin-top: 3cm;
+            margin-top: 1cm;
             margin-bottom: 2cm;
             margin-left: 2cm;
             margin-right: 2cm;
@@ -16,17 +16,6 @@
         }
 
         /* --- HEADER --- */
-        header {
-            position: fixed;
-            top: 0cm;
-            left: 0cm;
-            right: 0cm;
-            height: 2.5cm;
-            background-color: #1e293b; /* Slate 800 */
-            color: white;
-            padding: 0 2cm;
-            line-height: 2.5cm;
-        }
         .header-title { float: left; font-size: 18px; font-weight: bold; text-transform: uppercase; }
         .header-meta { float: right; font-size: 10px; text-align: right; line-height: 1.2; margin-top: 0.8cm; }
 
@@ -136,16 +125,42 @@
 </head>
 <body>
 
-<header>
-    <h1>Corte de Caja (Corte Z)</h1>
-    <p>TURNO #{{ $turno->id }} &nbsp;|&nbsp; <strong>FECHA:</strong> {{ $turno->created_at->format('d/m/Y H:i') }}</p>
-    <p><strong>SUCURSAL:</strong> {{ $turno->sucursal->nombre }} &nbsp;|&nbsp; <strong>CAJERO:</strong> {{ $turno->user->name }}</p>
-    <div style="margin-top: 10px; padding: 5px; background: #f1f5f9; display: inline-block; border-radius: 4px; font-size: 10px;">
-        <strong>ESTADO:</strong> {{ strtoupper($turno->status) }}
-        @if($turno->cerrado_at)
-            &nbsp;|&nbsp; <strong>CIERRE:</strong> {{ \Carbon\Carbon::parse($turno->cerrado_at)->format('d/m/Y H:i') }}
-        @endif
-    </div>
+<header style="width: 100%; border-bottom: 3px solid #0f172a; padding-bottom: 10px; margin-bottom: 10px; position: static; height: auto; line-height: normal; background-color: transparent; color: #334155; padding: 0;">
+    <table style="width: 100%; margin: 0; border: none;">
+        <tr>
+            <td style="vertical-align: top; border: none; padding: 0;">
+                <div style="font-size: 22px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -1px; margin-bottom: 2px;">
+                    {{ $turno->sucursal->nombre }}
+                </div>
+                <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">
+                    CORTE DE CAJA (CORTE Z)
+                </div>
+                <div style="margin-top: 8px;">
+                    <span style="display: inline-block; padding: 3px 8px; background: #f1f5f9; border-radius: 4px; font-size: 10px; font-weight: bold; color: #0f172a; margin-right: 5px;">
+                        TURNO #{{ $turno->id }}
+                    </span>
+                    <span style="display: inline-block; padding: 3px 8px; background: {{ $turno->status === 'Cerrado' ? '#ecfdf5' : '#eff6ff' }}; border-radius: 4px; font-size: 10px; font-weight: bold; color: {{ $turno->status === 'Cerrado' ? '#047857' : '#1d4ed8' }};">
+                        ESTADO: {{ strtoupper($turno->status) }}
+                    </span>
+                </div>
+            </td>
+            <td class="text-right" style="vertical-align: top; border: none; padding: 0; text-align: right;">
+                <div style="font-size: 14px; font-weight: bold; color: #334155; margin-bottom: 4px;">
+                    {{ $turno->user->name }}
+                </div>
+                <div style="font-size: 9px; color: #64748b; margin-bottom: 2px;">CAJERO EN TURNO</div>
+                
+                <div style="margin-top: 10px; font-size: 9px; color: #475569;">
+                    <strong>APERTURA:</strong> {{ $turno->created_at->format('d/m/Y h:i A') }}<br>
+                    @if($turno->cerrado_at)
+                        <strong>CIERRE:</strong> {{ \Carbon\Carbon::parse($turno->cerrado_at)->format('d/m/Y h:i A') }}
+                    @else
+                        <strong>CIERRE:</strong> EN CURSO
+                    @endif
+                </div>
+            </td>
+        </tr>
+    </table>
 </header>
 
 <footer>
