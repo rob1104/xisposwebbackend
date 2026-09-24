@@ -122,7 +122,7 @@ class VentaController extends Controller
 
                     // B. Validamos (Nadie más puede modificar esto mientras estemos aquí)
                     if ($stockActual < $cantidadVenta) {
-                        throw new \Exception("Stock insuficiente: '{$producto->nombre}'. Tienes: {$stockActual}, Intentas vender: {$cantidadVenta}");
+                        abort(422, "Stock insuficiente: '{$producto->nombre}'. Tienes: {$stockActual}, Intentas vender: {$cantidadVenta}");
                     }
 
                     // C. Descontamos y actualizamos
@@ -432,7 +432,7 @@ class VentaController extends Controller
         $stockHijo = $pivotHijo ? $pivotHijo->stock_actual : 0;
 
         if ($stockHijo < $cantidadRequerida) {
-            throw new \Exception("Stock insuficiente de ingrediente ({$hijo->nombre}) para $observacion. Stock: $stockHijo, Requerido: $cantidadRequerida");
+            abort(422, "Stock insuficiente de ingrediente ({$hijo->nombre}) para $observacion. Stock: $stockHijo, Requerido: $cantidadRequerida");
         }
 
         $nuevoStockHijo = $stockHijo - $cantidadRequerida;
