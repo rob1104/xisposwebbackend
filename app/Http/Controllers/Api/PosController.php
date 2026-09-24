@@ -38,6 +38,13 @@ class PosController extends Controller
             return response()->json(['message' => 'El usuario no tiene permisos para autorizar turnos'], 403);
         }
 
+        if (!$supervisor->hasRole('Administrador')) {
+            $sucursalesSupervisor = $supervisor->sucursales->pluck('id')->toArray();
+            if (!in_array($request->sucursal_id, $sucursalesSupervisor)) {
+                return response()->json(['message' => 'El supervisor no tiene asignada esta sucursal'], 403);
+            }
+        }
+
         $turno = CajaTurno::create([
             'user_id' => auth()->id(),
             'autorizado_por' => $supervisor->id,
