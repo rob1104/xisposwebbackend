@@ -25,5 +25,6 @@ class PermissionsSeeder extends Seeder
         // Permisos especiales para procesos específicos
         Permission::create(['name' => 'ventas.pos']); // Acceso al Punto de Venta
         Permission::create(['name' => 'ventas.cancelar']); // Cancelar tickets
+        Permission::create(['name' => 'turnos.autorizar']); // Autorizar apertura de turnos
     }
 }

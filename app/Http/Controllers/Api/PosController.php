@@ -34,6 +34,9 @@ class PosController extends Controller
         if(!Hash::check($request->supervisor_password, $supervisor->password)) {
             return response()->json(['message' => 'Contraseña de supervisor incorrecta'], 422);
         }
+        if(!$supervisor->hasPermissionTo('turnos.autorizar')) {
+            return response()->json(['message' => 'El usuario no tiene permisos para autorizar turnos'], 403);
+        }
 
         $turno = CajaTurno::create([
             'user_id' => auth()->id(),
@@ -413,3 +416,4 @@ class PosController extends Controller
         return empty($maximosPosibles) ? 0 : min($maximosPosibles);
     }
 }
+

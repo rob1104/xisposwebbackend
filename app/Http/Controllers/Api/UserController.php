@@ -15,7 +15,7 @@ class UserController extends Controller
     public function index()
     {
         // Traemos usuarios con sus roles para la tabla de Quasar
-        $users = User::with(['roles:name', 'sucursales', 'permissions'])->get()->map(function($user) {
+        $users = User::with(['roles', 'sucursales', 'permissions'])->get()->map(function($user) {
             return [
                 'id'     => $user->id,
                 'name'   => $user->name,
