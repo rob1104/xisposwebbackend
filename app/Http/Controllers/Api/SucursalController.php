@@ -19,9 +19,28 @@ class SucursalController extends Controller
     public function store(SucursalRequest $request)
     {
         $sucursal = Sucursal::create($request->validated());
-        return response()->json([
-            'message' => "Sucursal '{$sucursal->nombre}' registrada con éxito."
-        ], 201);
+        return response()->json($sucursal, 201);
+    }
+
+    public function updateImpresoras(Request $request)
+    {
+        $request->validate([
+            'sucursales' => 'required|array',
+            'sucursales.*.id' => 'required|exists:sucursales,id',
+            'sucursales.*.impresora_general_url' => 'nullable|string',
+            'sucursales.*.impresora_cocina_url' => 'nullable|string',
+        ]);
+
+        foreach ($request->sucursales as $suc) {
+            $sucursal = Sucursal::find($suc['id']);
+            if ($sucursal) {
+                $sucursal->update([
+                    'impresora_general_url' => $suc['impresora_general_url'] ?: 'http://127.0.0.1:5000',
+                    'impresora_cocina_url' => $suc['impresora_cocina_url'] ?: 'http://127.0.0.1:5001',
+                ]);
+            }
+        }
+        return response()->json(['message' => 'Impresoras actualizadas']);
     }
 
     public function update(SucursalRequest $request, Sucursal $sucursale)

@@ -17,7 +17,8 @@ class Sucursal extends Model
         'telefono',
         'sucursale_id',
         'codigo_postal',
-        'prefijo', 'bascula'
+        'prefijo', 'bascula',
+        'impresora_general_url', 'impresora_cocina_url'
     ];
     public function users()
     {
