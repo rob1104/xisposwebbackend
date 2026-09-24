@@ -75,8 +75,10 @@ class RestAdminController extends Controller
         $hasta = $request->get('hasta', date('Y-m-d 23:59:59'));
 
         // Base Query: Órdenes Cerradas o Cobradas (Ventas reales)
-        $ordenesBase = RestOrden::where('sucursale_id', $sucursalId)
-            ->whereBetween('created_at', [$desde, $hasta]);
+        $ordenesBase = RestOrden::whereBetween('updated_at', [$desde, $hasta]);
+        if ($sucursalId) {
+            $ordenesBase->where('sucursale_id', $sucursalId);
+        }
 
         // 1. KPIs Principales
         $totalVentas = (clone $ordenesBase)->sum('total');
@@ -94,13 +96,17 @@ class RestAdminController extends Controller
 
         // 3. Top Productos Más Vendidos
         // Hacemos join con detalles
-        $topProductos = \DB::table('rest_orden_detalles')
+        $queryProductos = \DB::table('rest_orden_detalles')
             ->join('rest_ordenes', 'rest_ordenes.id', '=', 'rest_orden_detalles.rest_orden_id')
             ->join('productos', 'productos.id', '=', 'rest_orden_detalles.producto_id')
-            ->where('rest_ordenes.sucursale_id', $sucursalId)
             ->whereIn('rest_ordenes.estatus', ['Cerrada', 'Pagada'])
-            ->whereBetween('rest_ordenes.updated_at', [$desde, $hasta])
-            ->selectRaw('productos.nombre, sum(rest_orden_detalles.cantidad) as cantidad_vendida, sum(rest_orden_detalles.cantidad * rest_orden_detalles.precio) as total_generado')
+            ->whereBetween('rest_ordenes.updated_at', [$desde, $hasta]);
+            
+        if ($sucursalId) {
+            $queryProductos->where('rest_ordenes.sucursale_id', $sucursalId);
+        }
+
+        $topProductos = $queryProductos->selectRaw('productos.nombre, sum(rest_orden_detalles.cantidad) as cantidad_vendida, sum(rest_orden_detalles.cantidad * rest_orden_detalles.precio) as total_generado')
             ->groupBy('productos.id', 'productos.nombre')
             ->orderByDesc('cantidad_vendida')
             ->take(7)
