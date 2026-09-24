@@ -1,15 +1,17 @@
-<?php
+const fs = require('fs');
 
-namespace App\Http\Controllers;
+const content = `<?php
 
-use App\Models\Ticket;
-use Illuminate\Http\Request;
+namespace App\\Http\\Controllers;
+
+use App\\Models\\Ticket;
+use Illuminate\\Http\\Request;
 
 class TicketController extends Controller
 {
     public function show($sucursal_id)
     {
-        $sucursal = \App\Models\Sucursal::find($sucursal_id);
+        $sucursal = \\App\\Models\\Sucursal::find($sucursal_id);
         $config = Ticket::where('sucursale_id', $sucursal_id)->first();
         
         return response()->json([
@@ -29,7 +31,7 @@ class TicketController extends Controller
             'impresora_cocina_url' => 'nullable|string',
         ]);
 
-        $sucursal = \App\Models\Sucursal::find($sucursal_id);
+        $sucursal = \\App\\Models\\Sucursal::find($sucursal_id);
         if ($sucursal) {
             $sucursal->update([
                 'impresora_general_url' => $request->impresora_general_url,
@@ -51,3 +53,6 @@ class TicketController extends Controller
         ]);
     }
 }
+`;
+
+fs.writeFileSync('d:/Escritorio/XisPOS 3.0/xisposbackend/app/Http/Controllers/TicketController.php', content, 'utf8');

@@ -66,8 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('clientes', ClientesController::class);
     Route::apiResource('providers', ProveedorController::class);
     Route::apiResource('productos', ProductoController::class);
-    Route::post('/sucursales/impresoras', [SucursalController::class, 'updateImpresoras']);
-    Route::apiResource('sucursales', SucursalController::class);
+        Route::apiResource('sucursales', SucursalController::class);
     Route::apiResource('compras', CompraController::class);
     Route::apiResource('ventas', VentaController::class);
     Route::apiResource('cfdis', CfdiController::class);
